@@ -538,11 +538,6 @@ public class ShopScreen extends Screen {
 
 	private void drawList() {
 		if (this.entries.isEmpty()) {
-			if (this.tab == Tab.EFFECTS) {
-				drawEffectsPlaceholderRow();
-				drawLightningPlaceholderRow();
-				return;
-			}
 			this.drawManager.drawSmallString("Nothing for sale here.",
 					MARGIN + 6, bodyTop() + 18, Color.GRAY);
 			return;
@@ -649,8 +644,6 @@ public class ShopScreen extends Screen {
 		this.drawManager.drawBox(area.x, area.y, area.width, area.height,
 				BORDER);
 		if (this.entries.isEmpty()) {
-			if (this.tab == Tab.EFFECTS)
-				drawEffectsPlaceholderDetail(area);
 			return;
 		}
 
@@ -734,58 +727,6 @@ public class ShopScreen extends Screen {
 			this.drawManager.drawSmallString(label, left + 12, button.y + 15,
 					affordable ? color : TOO_EXPENSIVE);
 		}
-	}
-
-	/**
-	 * Placeholder row in the Effects tab until effects are sold.
-	 * AUTHORED BY: VFX TEAM (Effection)
-	 */
-	private void drawEffectsPlaceholderRow() {
-		Rectangle row = rowArea(0);
-		this.drawManager.drawBox(row.x, row.y, row.width, row.height,
-				BORDER);
-		this.drawManager.drawSmallString("COMET TRAIL", row.x + 8,
-				row.y + 18, Color.GRAY);
-		String soon = "SOON";
-		this.drawManager.drawSmallString(soon, row.x + row.width - 8
-				- this.drawManager.getSmallStringWidth(soon), row.y + 18,
-				Tab.EFFECTS.color);
-	}
-
-	/**
-	 * Placeholder row for Lightning Chain until it is sold.
-	 * AUTHORED BY: VFX TEAM (Effection)
-	 */
-	private void drawLightningPlaceholderRow() {
-		Rectangle row = rowArea(1);
-		this.drawManager.drawBox(row.x, row.y, row.width, row.height,
-				BORDER);
-		this.drawManager.drawSmallString("LIGHTNING CHAIN", row.x + 8,
-				row.y + 18, Color.GRAY);
-		String soon = "SOON";
-		this.drawManager.drawSmallString(soon, row.x + row.width - 8
-				- this.drawManager.getSmallStringWidth(soon), row.y + 18,
-				Tab.EFFECTS.color);
-	}
-
-	/**
-	 * Placeholder detail panel in the Effects tab until effects are sold.
-	 * AUTHORED BY: VFX TEAM (Effection)
-	 *
-	 * @param area
-	 *            Detail panel area.
-	 */
-	private void drawEffectsPlaceholderDetail(final Rectangle area) {
-		int centerX = area.x + area.width / 2;
-		String name = "Comet Trail";
-		this.drawManager.drawRegularString(name, centerX
-				- this.drawManager.getRegularStringWidth(name) / 2,
-				area.y + 22, Tab.EFFECTS.color);
-		drawCometTrailPreview(centerX, area.y + 36);
-		int y = area.y + 94;
-		drawCentered("BULLET EFFECT", centerX, y, Color.GRAY);
-		y += this.drawManager.getSmallLineHeight() + 4;
-		drawCentered("COMING SOON", centerX, y, Color.WHITE);
 	}
 
 	/** Trail colours, hot to cool. AUTHORED BY: VFX TEAM (Effection) */
