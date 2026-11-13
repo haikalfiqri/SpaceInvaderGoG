@@ -131,8 +131,8 @@ public final class InputManager implements KeyListener, MouseMotionListener, Mou
 	 */
 	@Override
 	public void mouseMoved(final MouseEvent e) {
-		mouseX = e.getX();
-		mouseY = e.getY();
+		mouseX = (int) (e.getX() / Core.SCALE);
+		mouseY = (int) (e.getY() / Core.SCALE);
 		isMoved = true;
 
 	}
@@ -173,8 +173,8 @@ public final class InputManager implements KeyListener, MouseMotionListener, Mou
 	 */
 	@Override
 	public void mousePressed(final MouseEvent e) {
-		mouseX = e.getX();
-		mouseY = e.getY();
+		mouseX = (int) (e.getX() / Core.SCALE);
+		mouseY = (int) (e.getY() / Core.SCALE);
 		isClick = true;
 		if (e.getButton() == MouseEvent.BUTTON1)
 			this.leftMousePressed = true;
@@ -187,8 +187,8 @@ public final class InputManager implements KeyListener, MouseMotionListener, Mou
 	@Override
 	public void mouseReleased(final MouseEvent e) {
 		isClick = false;
-		mouseX = e.getX();
-		mouseY = e.getY();
+		mouseX = (int) (e.getX() / Core.SCALE);
+		mouseY = (int) (e.getY() / Core.SCALE);
 		if (e.getButton() == MouseEvent.BUTTON1)
 			this.leftMousePressed = false;
 	}
