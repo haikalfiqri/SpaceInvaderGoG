@@ -33,6 +33,8 @@ public final class Core {
 	private static final int WIDTH = 448;
 	/** Height of current screen. */
 	private static final int HEIGHT = 520;
+	/** Window magnification (GOG-5). Override with -Dgame.scale=2.0. */
+	public static final double SCALE = readScale();
 	/** Max fps of current screen. */
 	private static final int FPS = 60;
 
@@ -43,6 +45,20 @@ public final class Core {
 	/** Total number of levels. */
 	private static final int NUM_LEVELS = 10;
 	
+	/**
+	 * Reads the window scale from the game.scale system property.
+	 *
+	 * @return Scale between 1.0 and 3.0, default 1.5.
+	 */
+	private static double readScale() {
+		try {
+			double v = Double.parseDouble(System.getProperty("game.scale", "1.5"));
+			return Math.max(1.0, Math.min(3.0, v));
+		} catch (NumberFormatException e) {
+			return 1.5;
+		}
+	}
+
 	/** Difficulty settings for level 1. */
 	private static final GameSettings SETTINGS_LEVEL_1 =
 			new GameSettings(5, 2, 60, 2000);
@@ -117,7 +133,7 @@ public final class Core {
 			e.printStackTrace();
 		}
 
-		frame = new Frame(WIDTH, HEIGHT);
+		frame = new Frame(WIDTH, HEIGHT, SCALE);
 		DrawManager.getInstance().setFrame(frame);
 		int width = frame.getWidth();
 		int height = frame.getHeight();

@@ -21,6 +21,9 @@ public class Frame extends JFrame {
 	private int height;
 	/** Screen currently shown. */
 	private Screen currentScreen;
+	/** Window magnification (GOG-5). The game keeps drawing on its original
+	 * logical canvas; DrawManager and InputManager scale to/from this. */
+	private final double scale;
 
 	/**
 	 * Initializes the new frame.
@@ -31,6 +34,21 @@ public class Frame extends JFrame {
 	 *            Frame height.
 	 */
 	public Frame(final int width, final int height) {
+		this(width, height, 1.0);
+	}
+
+	/**
+	 * Initializes the new frame, magnified by the given scale.
+	 *
+	 * @param width
+	 *            Base (unscaled) frame width.
+	 * @param height
+	 *            Base (unscaled) frame height.
+	 * @param scale
+	 *            Window magnification, 1.0 = original size.
+	 */
+	public Frame(final int width, final int height, final double scale) {
+		this.scale = scale;
 		setSize(width, height);
 		setResizable(false);
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -41,6 +59,13 @@ public class Frame extends JFrame {
 		Insets insets = getInsets();
 		this.width = width - insets.left - insets.right;
 		this.height = height - insets.top + insets.bottom;
+
+		// Enlarge the window; screens still see the original logical size.
+		int contentW = width - insets.left - insets.right;
+		int contentH = height - insets.top - insets.bottom;
+		setSize((int) Math.round(contentW * scale) + insets.left + insets.right,
+				(int) Math.round(contentH * scale) + insets.top + insets.bottom);
+		setLocationRelativeTo(null);
 		setTitle("Invaders");
 
 		addKeyListener(Core.getInputManager());
@@ -60,6 +85,15 @@ public class Frame extends JFrame {
 		currentScreen = screen;
 		currentScreen.initialize();
 		return currentScreen.run();
+	}
+
+	/**
+	 * Getter for the window magnification.
+	 *
+	 * @return Scale factor, 1.0 = original size.
+	 */
+	public final double getScale() {
+		return this.scale;
 	}
 
 	/**
