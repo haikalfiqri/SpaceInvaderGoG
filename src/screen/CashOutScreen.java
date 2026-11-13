@@ -135,9 +135,11 @@ public class CashOutScreen extends Screen {
 
 		drawRiskPreview(this.height / 2 + 60);
 
+		// The hint sets the grey colour, so the "space" line is drawn right
+		// after it to match, a full row above (they used to overlap).
 		this.drawManager.drawKeyHints(this, "esc cash out and end run");
 		this.drawManager.drawCenteredRegularString(this, "space risk it on level "
-				+ this.nextLevel, this.height - 45);
+				+ this.nextLevel, this.height - 75);
 
 		this.drawManager.completeDrawing(this);
 	}

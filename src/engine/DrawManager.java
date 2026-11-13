@@ -1027,10 +1027,99 @@ public final class DrawManager {
 	 *            Screen to draw on.
 	 */
 	public void drawTitle(final Screen screen) {
-		String titleString = "Invaders";
+		final String[] lines = { "SPACE", "INVADER" };
+		Graphics2D g = (Graphics2D) backBufferGraphics;
 
-		backBufferGraphics.setColor(Color.GREEN);
-		drawCenteredBigString(screen, titleString, screen.getHeight() / 3);
+		// Size the font so the longest line fills ~86% of the screen width,
+		// like the big blocky title in the template. Cached per width.
+		if (titleFont == null || titleFontScreenWidth != screen.getWidth()) {
+			FontMetrics base = g.getFontMetrics(fontBig);
+			float size = fontBig.getSize2D() * (screen.getWidth()
+					* TITLE_WIDTH_RATIO) / base.stringWidth(lines[1]);
+			titleFont = fontBig.deriveFont(size);
+			titleFontScreenWidth = screen.getWidth();
+		}
+		FontMetrics fm = g.getFontMetrics(titleFont);
+		int ascent = fm.getAscent();
+		int gap = Math.max(6, ascent / 6);
+		int firstBaseline = TITLE_TOP + ascent;
+		// Letters are placed by their drawn width plus a small gap, instead
+		// of the font's wide default advance, so they sit close together.
+		int letterGap = Math.max(3, Math.round(titleFont.getSize2D() * 0.10f));
+
+		// Both lines as one outline: used to colour the title and to clip
+		// the shine so it only shows on the letters.
+		java.awt.geom.Area shape = new java.awt.geom.Area();
+		int lastBaseline = firstBaseline;
+		for (int i = 0; i < lines.length; i++) {
+			java.awt.font.GlyphVector[] glyphs =
+					new java.awt.font.GlyphVector[lines[i].length()];
+			int lineWidth = -letterGap;
+			for (int c = 0; c < glyphs.length; c++) {
+				glyphs[c] = titleFont.createGlyphVector(g.getFontRenderContext(),
+						String.valueOf(lines[i].charAt(c)));
+				lineWidth += (int) Math.ceil(glyphs[c].getVisualBounds()
+						.getWidth()) + letterGap;
+			}
+			int baseline = firstBaseline + i * (ascent + gap);
+			lastBaseline = baseline;
+			int pen = (screen.getWidth() - lineWidth) / 2;
+			for (int c = 0; c < glyphs.length; c++) {
+				java.awt.geom.Rectangle2D vb = glyphs[c].getVisualBounds();
+				shape.add(new java.awt.geom.Area(glyphs[c].getOutline(
+						(float) (pen - vb.getX()), baseline)));
+				pen += (int) Math.ceil(vb.getWidth()) + letterGap;
+			}
+		}
+		g.setColor(Color.GREEN);
+		g.fill(shape);
+
+		// Shining effect: a slanted light band sweeps left to right across
+		// the letters, then pauses (loop matches the 1.3 s template).
+		long phase = System.currentTimeMillis() % TITLE_SHINE_CYCLE_MS;
+		if (phase < TITLE_SHINE_SWEEP_MS) {
+			java.awt.Rectangle box = shape.getBounds();
+			int slant = box.height / 2;
+			int bandWidth = Math.max(16, box.width / 9);
+			float progress = (float) phase / TITLE_SHINE_SWEEP_MS;
+			int travel = box.width + slant + bandWidth * 3;
+			int x = box.x - slant - bandWidth + (int) (progress * travel);
+
+			java.awt.Shape oldClip = g.getClip();
+			g.clip(shape);
+			g.setColor(new Color(255, 255, 255, 150));
+			fillSlantedBand(g, x, bandWidth, box, slant);
+			g.setColor(new Color(255, 255, 255, 90));
+			fillSlantedBand(g, x - bandWidth * 2, Math.max(4, bandWidth / 4),
+					box, slant);
+			g.setClip(oldClip);
+		}
+
+		// Small developer credit under the title.
+		g.setFont(fontRegular);
+		g.setColor(Color.GRAY);
+		drawCenteredRegularString(screen, "BY GOG", lastBaseline + 28);
+	}
+
+	/** Cached title font and the screen width it was sized for. */
+	private Font titleFont;
+	private int titleFontScreenWidth = -1;
+	/** Share of the screen width the longest title line fills. */
+	private static final float TITLE_WIDTH_RATIO = 0.98f;
+	/** Gap above the title, in pixels. */
+	private static final int TITLE_TOP = 36;
+	/** Time the shine takes to cross the title. */
+	private static final long TITLE_SHINE_SWEEP_MS = 450;
+	/** Time between the start of two shines. */
+	private static final long TITLE_SHINE_CYCLE_MS = 1300;
+
+	/** Fills one "/" leaning band across the height of the given box. */
+	private static void fillSlantedBand(final Graphics2D g, final int x,
+			final int width, final java.awt.Rectangle box, final int slant) {
+		int top = box.y;
+		int bottom = box.y + box.height;
+		g.fillPolygon(new int[] { x + slant, x + slant + width, x + width, x },
+				new int[] { top, top, bottom, bottom }, 4);
 	}
 
 	/**
@@ -1378,11 +1467,34 @@ public final class DrawManager {
 	 *            Stars to draw.
 	 */
 	public void drawStarfield(final Screen screen, final Starfield starfield) {
+		// Dark nebula, enlarged without smoothing so it stays blocky.
+		backBufferGraphics.drawImage(starfield.getNebula(), 0, 0,
+				starfield.getNebula().getWidth() * starfield.getNebulaPixel(),
+				starfield.getNebula().getHeight() * starfield.getNebulaPixel(),
+				null);
+
+		// Planets sit on the nebula, behind the stars.
+		for (screen.Planet planet : starfield.getPlanets())
+			backBufferGraphics.drawImage(planet.getFrame(), planet.getX(),
+					planet.getY(), null);
+
+		// Twinkling stars: a centre dot with four arms that grow and shrink.
+		// The outer part of a long arm is dotted, like the template.
+		int u = starfield.getStarPixel();
 		for (int i = 0; i < starfield.getCount(); i++) {
-			int size = starfield.getSize(i);
+			int cx = starfield.getX(i);
+			int cy = starfield.getY(i);
+			int arm = starfield.getArm(i);
 			backBufferGraphics.setColor(starfield.getColor(i));
-			backBufferGraphics.fillRect(starfield.getX(i), starfield.getY(i),
-					size, size);
+			backBufferGraphics.fillRect(cx, cy, u, u);
+			for (int d = 1; d <= arm; d++) {
+				if (d > 2 && d % 2 == 1)
+					continue;
+				backBufferGraphics.fillRect(cx + d * u, cy, u, u);
+				backBufferGraphics.fillRect(cx - d * u, cy, u, u);
+				backBufferGraphics.fillRect(cx, cy + d * u, u, u);
+				backBufferGraphics.fillRect(cx, cy - d * u, u, u);
+			}
 		}
 	}
 
