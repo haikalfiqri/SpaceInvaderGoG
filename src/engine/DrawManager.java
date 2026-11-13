@@ -8,6 +8,7 @@ import java.awt.Font;
 import java.awt.FontFormatException;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -322,8 +323,20 @@ public final class DrawManager {
 	 */
 	public void completeDrawing(final Screen screen) {
 		setWorldOffset(0, 0);
-		graphics.drawImage(backBuffer, frame.getInsets().left,
-				frame.getInsets().top, frame);
+		Graphics2D g2 = (Graphics2D) graphics;
+		double scale = frame.getScale();
+		if (scale == 1.0) {
+			g2.drawImage(backBuffer, frame.getInsets().left,
+					frame.getInsets().top, frame);
+		} else {
+			// GOG-5: draw the logical canvas magnified to the bigger window.
+			g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+					RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			g2.drawImage(backBuffer, frame.getInsets().left,
+					frame.getInsets().top,
+					(int) Math.round(backBuffer.getWidth() * scale),
+					(int) Math.round(backBuffer.getHeight() * scale), frame);
+		}
 	}
 
 	/**
