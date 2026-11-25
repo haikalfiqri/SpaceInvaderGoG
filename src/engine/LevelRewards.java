@@ -34,11 +34,16 @@ public final class LevelRewards {
 	/** Coins for clearing a planet's last level. */
 	static final int PLANET_COINS = 20;
 	/** Diamonds for clearing a planet's last level. */
-	static final int PLANET_DIAMONDS = 1;
+
+// GOG-99: First-clear Story Mode boss diamond bonuses.
+	static final int LEVEL_10_DIAMONDS = 5;
+	static final int LEVEL_20_DIAMONDS = 7;
+	static final int LEVEL_30_DIAMONDS = 11;
+
 	/** Coins for clearing the final level. */
 	static final int FINAL_COINS = 50;
 	/** Diamonds for clearing the final level. */
-	static final int FINAL_DIAMONDS = 3;
+	static final int FINAL_DIAMONDS = 17;
 	/** Levels per planet. */
 	private static final int LEVELS_PER_PLANET = 10;
 	/** Save file listing the levels whose reward was already claimed. */
@@ -92,18 +97,39 @@ public final class LevelRewards {
 	 *            Story level, 1 to the last level.
 	 * @return The bonus, or null if the level gives none.
 	 */
+
 	public static Reward rewardFor(final int level) {
 		if (level < 1 || level > StoryMode.TOTAL_LEVELS)
 			return null;
+
+		// Final boss: Level 40.
 		if (level == StoryMode.TOTAL_LEVELS)
-			return new Reward("Story complete!", FINAL_COINS, FINAL_DIAMONDS);
-		if (level % LEVELS_PER_PLANET == 0)
-			return new Reward("Planet cleared!", PLANET_COINS,
-					PLANET_DIAMONDS);
+			return new Reward("Story complete!",
+					FINAL_COINS, FINAL_DIAMONDS);
+
+		// Planet boss bonuses: Levels 10, 20 and 30.
+		if (level % LEVELS_PER_PLANET == 0) {
+			int bonusDiamonds;
+
+			if (level == 10) {
+				bonusDiamonds = LEVEL_10_DIAMONDS;
+			} else if (level == 20) {
+				bonusDiamonds = LEVEL_20_DIAMONDS;
+			} else {
+				bonusDiamonds = LEVEL_30_DIAMONDS;
+			}
+
+			return new Reward("Planet cleared!",
+					PLANET_COINS, bonusDiamonds);
+		}
+
+		// Preserve the existing Level 5, 15, 25 and 35 coin rewards.
 		if (level % LEVELS_PER_PLANET == LEVELS_PER_PLANET / 2)
 			return new Reward("Boss defeated!", MID_BOSS_COINS, 0);
+
 		return null;
 	}
+
 
 	/**
 	 * Pays a level's bonus if it has one and it was never claimed before.

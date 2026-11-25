@@ -691,7 +691,21 @@ public class GameScreen extends Screen {
 				this.levelsCompletedRun++; // Sharpshooter tiers (Mantis)
 				SoundManager.getInstance().stopBgm();
 				SoundManager.getInstance().playSfx(Sound.VICTORY);
-				this.pendingDiamonds += this.level;
+
+// GOG-99: Story Mode diamond rewards are balanced separately.
+// Endless Mode keeps its original level-based rewards.
+				int levelCompletionDiamonds;
+
+				if (EndlessMode.isEnabled()) {
+					levelCompletionDiamonds = this.level;
+				} else if (this.level <= 20) {
+					levelCompletionDiamonds = 1;
+				} else {
+					levelCompletionDiamonds = 2;
+				}
+
+				this.pendingDiamonds += levelCompletionDiamonds;
+
 				collectRemainingCoins();
 				this.pendingDiamonds += this.meteors.collectRemaining(); // VFX TEAM (Effection): collects remaining diamonds from the meteor and adds them to pending
 				// Act 1 ends: the AI Warship's wreck opens a black hole
