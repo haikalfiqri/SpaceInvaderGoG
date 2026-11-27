@@ -20,6 +20,10 @@ public final class EndlessCheckpoint {
 	private static final Logger LOGGER = Logger.getLogger(
 			EndlessCheckpoint.class.getSimpleName());
 
+	/** Banks diamonds after each cleared endless wave. */
+	private static final EndlessMode.LevelClearedListener BANKER =
+			EndlessCheckpoint::bankIfCheckpoint;
+
 	/** Not used. Static class. */
 	private EndlessCheckpoint() {
 	}
@@ -41,6 +45,15 @@ public final class EndlessCheckpoint {
 	public static int nextCheckpoint(final int clearedWave) {
 		int cleared = Math.max(0, clearedWave);
 		return (cleared / WAVES_PER_CHECKPOINT + 1) * WAVES_PER_CHECKPOINT;
+	}
+
+	/**
+	 * Turns checkpoints on for endless runs by hooking into
+	 * {@link EndlessMode}. Safe to call before every run: the hook is only
+	 * added once.
+	 */
+	public static void install() {
+		EndlessMode.addLevelClearedListener(BANKER);
 	}
 
 	/**

@@ -3,6 +3,7 @@ import java.nio.file.Files;
 
 import engine.DiamondManager;
 import engine.EndlessCheckpoint;
+import engine.EndlessMode;
 import engine.GameState;
 
 /**
@@ -73,6 +74,16 @@ public final class EndlessCheckpointTest {
         // Wave 10 banks only what was earned since wave 5 (6+7+8+9+10 = 40).
         EndlessCheckpoint.bankIfCheckpoint(state(11, 40), 10);
         check(wallet.getDiamonds() == start + 55, "after wave 10 the wallet should hold 55 more");
+
+        // Hooked into endless: Core fires the hook after each cleared wave.
+        // Installing twice must not bank twice.
+        EndlessCheckpoint.install();
+        EndlessCheckpoint.install();
+        GameState afterHook = EndlessMode.fireLevelCleared(state(16, 65), 15);
+        check(wallet.getDiamonds() == start + 120, "hook should bank 65 once, wallet " + wallet.getDiamonds());
+        check(afterHook.getPendingDiamonds() == 0, "hook did not clear pending");
+        GameState notYet = EndlessMode.fireLevelCleared(state(17, 16), 16);
+        check(notYet.getPendingDiamonds() == 16 && wallet.getDiamonds() == start + 120, "hook banked on wave 16");
 
         // Saved to disk, not just in memory.
         File[] saved = dir.listFiles();
