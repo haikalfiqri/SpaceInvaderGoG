@@ -16,11 +16,12 @@ import java.util.Properties;
  * Reads and writes the small key=value save files of the skill tree
  * (shards, unlocked nodes). Files sit next to the other saves, or in
  * game.saveDirectory when that is set (tests). Writing goes through a
- * temporary file, so a crash never leaves half a file.
+ * temporary file, so a crash never leaves half a file. Public so the
+ * GOG-32 challenge saves (engine package) use the same safe writing.
  *
  * @author GoG - Progression (GOG-70)
  */
-final class SaveFile {
+public final class SaveFile {
 
 	private SaveFile() {
 	}
@@ -30,7 +31,7 @@ final class SaveFile {
 	 *            File name, e.g. "shards".
 	 * @return Where that save file lives.
 	 */
-	static File locate(final String name) {
+	public static File locate(final String name) {
 		String saveDirectory = System.getProperty("game.saveDirectory");
 		if (saveDirectory != null && !saveDirectory.trim().isEmpty())
 			return new File(saveDirectory, name);
@@ -49,7 +50,7 @@ final class SaveFile {
 	 *            File to read.
 	 * @return Its values; empty if it does not exist or can't be read.
 	 */
-	static Properties read(final File file) {
+	public static Properties read(final File file) {
 		Properties values = new Properties();
 		if (!file.exists())
 			return values;
@@ -71,7 +72,7 @@ final class SaveFile {
 	 *            First line of the file.
 	 * @return False if the file could not be written.
 	 */
-	static boolean write(final File file, final Properties values,
+	public static boolean write(final File file, final Properties values,
 			final String comment) {
 		try {
 			Path path = file.toPath();
@@ -99,7 +100,7 @@ final class SaveFile {
 	 *            Key to read.
 	 * @return The value as a number of 0 or more; 0 if missing or broken.
 	 */
-	static int count(final Properties values, final String key) {
+	public static int count(final Properties values, final String key) {
 		try {
 			return Math.max(0, Integer.parseInt(values.getProperty(key, "0")
 					.trim()));
