@@ -77,13 +77,23 @@ public final class EndlessCheckpointTest {
 
         // Hooked into endless: Core fires the hook after each cleared wave.
         // Installing twice must not bank twice.
-        EndlessCheckpoint.install();
-        EndlessCheckpoint.install();
+        // The listener hears about each bank once, with the right numbers.
+        final java.util.List<String> told = new java.util.ArrayList<String>();
+        EndlessCheckpoint.install((wave, amount) -> told.add(wave + ":" + amount));
+        EndlessCheckpoint.install((wave, amount) -> told.add(wave + ":" + amount));
         GameState afterHook = EndlessMode.fireLevelCleared(state(16, 65), 15);
         check(wallet.getDiamonds() == start + 120, "hook should bank 65 once, wallet " + wallet.getDiamonds());
         check(afterHook.getPendingDiamonds() == 0, "hook did not clear pending");
+        check(told.equals(java.util.Arrays.asList("15:65")), "listener heard " + told);
         GameState notYet = EndlessMode.fireLevelCleared(state(17, 16), 16);
         check(notYet.getPendingDiamonds() == 16 && wallet.getDiamonds() == start + 120, "hook banked on wave 16");
+        EndlessMode.fireLevelCleared(state(21, 0), 20);
+        check(told.size() == 1, "listener told on a wave with nothing banked: " + told);
+
+        // No listener is fine too.
+        EndlessCheckpoint.install(null);
+        EndlessMode.fireLevelCleared(state(26, 5), 25);
+        check(wallet.getDiamonds() == start + 125, "banking without a listener failed");
 
         // Saved to disk, not just in memory.
         File[] saved = dir.listFiles();

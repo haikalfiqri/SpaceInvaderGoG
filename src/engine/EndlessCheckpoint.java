@@ -20,9 +20,23 @@ public final class EndlessCheckpoint {
 	private static final Logger LOGGER = Logger.getLogger(
 			EndlessCheckpoint.class.getSimpleName());
 
+	/** Told when a checkpoint banks diamonds, e.g. to show a screen. */
+	public interface BankedListener {
+		/**
+		 * @param clearedWave
+		 *            Checkpoint wave that was just cleared.
+		 * @param banked
+		 *            Diamonds that were banked.
+		 */
+		void onBanked(int clearedWave, int banked);
+	}
+
+	/** Who to tell when diamonds are banked, or null for nobody. */
+	private static BankedListener bankedListener;
+
 	/** Banks diamonds after each cleared endless wave. */
 	private static final EndlessMode.LevelClearedListener BANKER =
-			EndlessCheckpoint::bankIfCheckpoint;
+			EndlessCheckpoint::bankAndTell;
 
 	/** Not used. Static class. */
 	private EndlessCheckpoint() {
@@ -51,9 +65,32 @@ public final class EndlessCheckpoint {
 	 * Turns checkpoints on for endless runs by hooking into
 	 * {@link EndlessMode}. Safe to call before every run: the hook is only
 	 * added once.
+	 *
+	 * @param onBanked
+	 *            Told each time diamonds are banked, or null for nobody.
 	 */
-	public static void install() {
+	public static void install(final BankedListener onBanked) {
+		bankedListener = onBanked;
 		EndlessMode.addLevelClearedListener(BANKER);
+	}
+
+	/**
+	 * Banks like {@link #bankIfCheckpoint} and tells the listener how many
+	 * diamonds were banked.
+	 *
+	 * @param state
+	 *            State going into the next wave.
+	 * @param clearedWave
+	 *            Number of the wave just cleared (1-based).
+	 * @return State to start the next wave with.
+	 */
+	private static GameState bankAndTell(final GameState state,
+			final int clearedWave) {
+		GameState after = bankIfCheckpoint(state, clearedWave);
+		int banked = state.getPendingDiamonds() - after.getPendingDiamonds();
+		if (banked > 0 && bankedListener != null)
+			bankedListener.onBanked(clearedWave, banked);
+		return after;
 	}
 
 	/**

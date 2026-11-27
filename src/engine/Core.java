@@ -148,7 +148,7 @@ public final class Core {
 					EndlessMode.setEnabled(endless);
 					// Bank diamonds every few waves in endless (GOG-109).
 					if (endless)
-						EndlessCheckpoint.install();
+						EndlessCheckpoint.install(null);
 					// Equip this mode's items for the run (GOG-50).
 					ItemSystem.setRunEquipment(ItemLoadout.getInstance()
 							.getEquipped(endless ? ItemLoadout.Mode.ENDLESS
