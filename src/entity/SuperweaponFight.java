@@ -29,6 +29,16 @@ public final class SuperweaponFight {
     public static final int MAX_DRONES = 5;
     public static final int BOMB_RADIUS = 36;
     public static final int PLAYER_INVULNERABILITY = 60;
+    public static final int REFLECT_DURATION = 180;
+    public static final int WAVE_WARNING = 60;
+    public static final int SLOW_DURATION = 150;
+    public static final double SLOW_FACTOR = .5;
+    public static final int WAVE_AUTO_COOLDOWN = 1080;
+    private static final int WAVE_GAP = 88;
+    private static final double WAVE_SPEED = 3.2;
+    private static final double WAVE_START_RADIUS = 12.0;
+    private static final double WAVE_BAND = 8.0;
+    private static final double WAVE_OPEN_HALF_ANGLE = Math.toRadians(11.5);
     public static final int PLAYER_WIDTH = 26, PLAYER_HEIGHT = 16;
     private static final int[] PORT_X = {7,36,63,87,136,160,187,217};
     private static final int[] PORT_Y = {49,62,73,82,82,73,62,49};
@@ -40,7 +50,7 @@ public final class SuperweaponFight {
 
     public enum Attack {
         SINGLE_LASER, ALL_LASERS, MEGA_LASER, BOMB, DRONES, HOMING,
-        SWEEP_RIGHT, SWEEP_LEFT, CONVERGE, REFLECT_SHIELD
+        SWEEP_RIGHT, SWEEP_LEFT, CONVERGE, REFLECT_SHIELD, SLOW_WAVE
     }
     public enum Kind { NORMAL, FREEZE, FAST, SPLIT, VULNERABLE, ACCELERATED, REFLECTED, HOMING }
     public static final class Shot {
@@ -75,6 +85,17 @@ public final class SuperweaponFight {
             this.x=x;this.y=y;this.homeY=homeY;this.vx=vx;this.kind=kind;this.nextShot=nextShot;
         }
     }
+    /** One expanding electromagnetic shockwave, leaving a safe opening sector. */
+    public static final class SlowWave {
+        public final int launch, gapCenter;
+        public final double sourceX, sourceY, openingAngle;
+        public double y;
+        private boolean resolved;
+        SlowWave(int launch,int gapCenter,double radius,double sourceX,double sourceY,double openingAngle){
+            this.launch=launch;this.gapCenter=gapCenter;this.y=radius;
+            this.sourceX=sourceX;this.sourceY=sourceY;this.openingAngle=openingAngle;
+        }
+    }
     private static final class PlayerShot {
         double x,y;
         PlayerShot(double x,double y){this.x=x;this.y=y;}
@@ -96,8 +117,13 @@ public final class SuperweaponFight {
     private int shield=SHIELD_HP,hull=HULL_HP,lives=3;
     private int frame, nextVolley=45, nextSpecial=120, nextPlayerShot;
     private int protectedUntil, frozenUntil, vulnerableUntil, reflectiveUntil, phaseFlashUntil;
+    private int slowedUntil, nextReflect=300, nextWave;
+    private SlowWave wave;
     private int hits, bombsDisarmed, reflectionCount;
     private int hitFlashUntil;
+    // Visual-only timestamps. Never affect attack scheduling, RNG or hit detection.
+    private final int[] portFiredAt = {-100,-100,-100,-100,-100,-100,-100,-100};
+    private int mainFiredAt=-100, bayOpenedAt=-100;
     private boolean automatic=true, megaStarted;
     private double playerX;
     private String message="SHIELD PHASE";
@@ -123,6 +149,10 @@ public final class SuperweaponFight {
     public boolean isInvincible(){return invincible;}
     public boolean isRecovering(){return frame<protectedUntil;}
     public boolean isFrozen(){return frame<frozenUntil;}
+    public boolean isSlowed(){return frame<slowedUntil;}
+    public int getSlowFramesRemaining(){return Math.max(0,slowedUntil-frame);}
+    public SlowWave getSlowWave(){return wave;}
+    public int getWaveGapWidth(){return WAVE_GAP;}
     public boolean isVulnerable(){return frame<vulnerableUntil;}
     public boolean isReflecting(){return frame<reflectiveUntil && !isWon() && !isMegaLocked();}
     public boolean isAutomatic(){return automatic;}
@@ -157,7 +187,7 @@ public final class SuperweaponFight {
         if(shield>0){if(--shield==0)beginPhaseTwo();}
         else if(--hull==0){
             hostile.clear();beams.clear();bombs.clear();drones.clear();friendly.clear();
-            reflectiveUntil=0;megaStarted=false;
+            reflectiveUntil=0;megaStarted=false;wave=null;slowedUntil=0;
             announce("SUPERWEAPON DESTROYED",Integer.MAX_VALUE-frame);
         }
         return true;
@@ -167,13 +197,13 @@ public final class SuperweaponFight {
         for(Beam b:beams)if(b.mega && frame>=b.start && frame<b.end)return true;
         return false;
     }
-    private boolean phaseTwoOnly(Attack a){return a==Attack.DRONES||a==Attack.HOMING||a==Attack.SWEEP_RIGHT||a==Attack.SWEEP_LEFT||a==Attack.CONVERGE||a==Attack.REFLECT_SHIELD;}
+    private boolean phaseTwoOnly(Attack a){return a==Attack.DRONES||a==Attack.HOMING||a==Attack.SWEEP_RIGHT||a==Attack.SWEEP_LEFT||a==Attack.CONVERGE;}
 
     /** Force one skill in the test arena. Phase two skills need the shield broken. */
     public boolean trigger(Attack attack){
         if(ended()||isMegaLocked()||(!isPhaseTwo()&&phaseTwoOnly(attack)))return false;
         // Do not interrupt an existing laser sequence (including a scheduled mega).
-        if(!beams.isEmpty())return false;
+        if(!beams.isEmpty() || (wave!=null && frame<wave.launch))return false;
         int end=frame;
         switch(attack){
             case SINGLE_LASER:
@@ -187,6 +217,7 @@ public final class SuperweaponFight {
                 if(!bombs.isEmpty())return false;
                 int p=1+random.nextInt(6);
                 bombs.add(new Bomb(getPortX(p),getPortY(p)+12,getPlayerY()+PLAYER_HEIGHT/2.0));
+                portFiredAt[p]=frame;
                 announce("BOMB INBOUND - SHOOT IT",120);break;
             case DRONES:
                 if(!drones.isEmpty())return false;
@@ -198,9 +229,11 @@ public final class SuperweaponFight {
                     drones.add(new Drone(x,getBossBottom()+12,getBossBottom()+48+(i%2)*25,
                             (i%2==0?1:-1)*(.85+random.nextDouble()*.45),types[(i+rotation)%types.length],frame+60+i*15));
                 }
+                bayOpenedAt=frame;
                 announce("ESCORTS DEPLOYED",120);break;
             case HOMING:
                 hostile.add(new Shot(width/2.0,getBossBottom()+6,0,2.5,Kind.HOMING));
+                mainFiredAt=frame;
                 announce("TRACKING PROJECTILE",100);break;
             case SWEEP_RIGHT:case SWEEP_LEFT:
                 for(int i=0;i<8;i++)end=Math.max(end,schedule(attack==Attack.SWEEP_RIGHT?i:7-i,frame+i*22,false));
@@ -214,8 +247,19 @@ public final class SuperweaponFight {
                 announce("CONVERGING LASERS - MAIN CANNON NEXT",end-frame);break;
             case REFLECT_SHIELD:
                 if(isReflecting())return false;
-                reflectiveUntil=frame+180;
-                announce("REFLECTIVE BARRIER - HOLD FIRE",180);break;
+                reflectiveUntil=frame+REFLECT_DURATION;
+                // Independent recurring barrier, available in either health phase.
+                // The interval is measured from activation, not expiration.
+                nextReflect=frame+(isPhaseTwo()?420+random.nextInt(181):540+random.nextInt(181));
+                announce("REFLECTIVE BARRIER - HOLD FIRE",REFLECT_DURATION);return true;
+            case SLOW_WAVE:
+                if(wave!=null)return false;
+                int gap=WAVE_GAP/2+12+random.nextInt(width-WAVE_GAP-23);
+                double sourceX=width/2.0,sourceY=getBossBottom()-10;
+                double openingAngle=Math.atan2(getPlayerY()+PLAYER_HEIGHT/2.0-sourceY,gap-sourceX);
+                wave=new SlowWave(frame+WAVE_WARNING,gap,WAVE_START_RADIUS,sourceX,sourceY,openingAngle);
+                nextWave=frame+WAVE_AUTO_COOLDOWN;
+                announce("EMP SHOCKWAVE - STAY IN THE OPENING",WAVE_WARNING+120);break;
             default:throw new IllegalStateException();
         }
         nextSpecial=Math.max(frame+(isPhaseTwo()?125:210),end+(isPhaseTwo()?55:100));
@@ -234,7 +278,13 @@ public final class SuperweaponFight {
     }
     private Attack chooseAttack(){
         int r=random.nextInt(100);
-        if(!isPhaseTwo())return r<45?Attack.SINGLE_LASER:r<67?Attack.ALL_LASERS:r<91?Attack.BOMB:Attack.MEGA_LASER;
+        if(!isPhaseTwo()){
+            if(r<43)return Attack.SINGLE_LASER;
+            if(r<64)return Attack.ALL_LASERS;
+            if(r<87)return Attack.BOMB;
+            if(r<92 && frame>=nextWave && wave==null)return Attack.SLOW_WAVE;
+            return r<92?Attack.SINGLE_LASER:Attack.MEGA_LASER;
+        }
         if(r<19)return Attack.SINGLE_LASER;
         if(r<32)return Attack.ALL_LASERS;
         if(r<43)return Attack.BOMB;
@@ -243,13 +293,16 @@ public final class SuperweaponFight {
         if(r<76)return Attack.SWEEP_RIGHT;
         if(r<85)return Attack.SWEEP_LEFT;
         if(r<91)return Attack.CONVERGE;
-        if(r<96)return Attack.REFLECT_SHIELD;
+        if(r<96)return frame>=nextWave&&wave==null?Attack.SLOW_WAVE:Attack.SINGLE_LASER;
         return Attack.MEGA_LASER;
     }
     /** Normal projectiles dominate phase one; special shots become more common later. */
     public Kind randomBullet(){
         int r=random.nextInt(100);
-        if(!isPhaseTwo())return r<82?Kind.NORMAL:r<88?Kind.FREEZE:r<93?Kind.FAST:r<97?Kind.SPLIT:Kind.VULNERABLE;
+        if(!isPhaseTwo()){
+            if(shield>SHIELD_HP/2)return r<95?Kind.NORMAL:r<97?Kind.FREEZE:r<98?Kind.FAST:r<99?Kind.SPLIT:Kind.VULNERABLE;
+            return r<90?Kind.NORMAL:r<94?Kind.FREEZE:r<97?Kind.FAST:r<99?Kind.SPLIT:Kind.VULNERABLE;
+        }
         return r<32?Kind.NORMAL:r<44?Kind.FREEZE:r<61?Kind.FAST:r<81?Kind.SPLIT:r<88?Kind.VULNERABLE:Kind.ACCELERATED;
     }
     private void addAimed(double x,double y,double tx,double ty,double speed,Kind kind){
@@ -264,12 +317,12 @@ public final class SuperweaponFight {
     /** Test one projectile type without waiting for RNG. */
     public boolean fireTestBullet(Kind kind){
         if(ended()||isMegaLocked()||kind==Kind.HOMING||kind==Kind.REFLECTED)return false;
-        int p=3;emit(getPortX(p),getPortY(p)+3,kind);return true;
+        int p=3;emit(getPortX(p),getPortY(p)+3,kind);portFiredAt[p]=frame;return true;
     }
     private void volley(){
-        int first=random.nextInt(8),count=1+random.nextInt(isPhaseTwo()?3:2);
+        int first=random.nextInt(8),count=isPhaseTwo()?1+random.nextInt(3):2+random.nextInt(2);
         for(int i=0;i<count;i++){
-            int p=(first+i*3)%8;emit(getPortX(p),getPortY(p)+2,randomBullet());
+            int p=(first+i*3)%8;emit(getPortX(p),getPortY(p)+2,randomBullet());portFiredAt[p]=frame;
         }
     }
 
@@ -277,23 +330,31 @@ public final class SuperweaponFight {
     public void tick(int direction,boolean fire){
         if(ended())return;
         frame++;
-        if(!isFrozen())playerX=Math.max(1,Math.min(width-PLAYER_WIDTH-1,playerX+Integer.signum(direction)*2));
+        if(!isFrozen())playerX=Math.max(1,Math.min(width-PLAYER_WIDTH-1,
+                playerX+Integer.signum(direction)*2*(isSlowed()?SLOW_FACTOR:1.0)));
         if(fire&&!isFrozen()&&!isRecovering()&&frame>=nextPlayerShot){
             friendly.add(new PlayerShot(playerCenter(),getPlayerY()-5));nextPlayerShot=frame+45;
         }
         beams.removeIf(b->frame>=b.end);
         updateMega();
         if(automatic&&!isMegaLocked()){
-            if(frame>=nextSpecial&&beams.isEmpty()){
-                if(!trigger(chooseAttack()))nextSpecial=frame+35;
-                updateMega();
+            if(beams.isEmpty() && (wave==null || frame>=wave.launch)){
+                if(frame>=nextReflect && !isReflecting())trigger(Attack.REFLECT_SHIELD);
+                else if(frame>=nextSpecial){
+                    if(!trigger(chooseAttack()))nextSpecial=frame+35;
+                    updateMega();
+                }
             }
-            if(!isMegaLocked()&&frame>=nextVolley){volley();nextVolley=frame+(isPhaseTwo()?25+random.nextInt(13):40+random.nextInt(19));}
+            if(!isMegaLocked()&&frame>=nextVolley){
+                volley();
+                nextVolley=frame+(isPhaseTwo()?25+random.nextInt(13):
+                        shield>SHIELD_HP/2?28+random.nextInt(11):35+random.nextInt(12));
+            }
         }
         updateDrones();
         updatePlayerShots();
         if(ended())return;
-        updateHostile();updateBombs();updateBeams();
+        updateHostile();updateBombs();updateBeams();updateWave();
         blasts.removeIf(b->frame>=b.end);
     }
     private void updateDrones(){
@@ -348,6 +409,26 @@ public final class SuperweaponFight {
             }
         }
     }
+    /** A wave never removes a life, consumes a shield, or changes bullet cooldowns. */
+    private void updateWave(){
+        if(wave==null || frame<wave.launch)return;
+        wave.y+=WAVE_SPEED;
+        if(!wave.resolved){
+            double px=playerCenter(), py=getPlayerY()+PLAYER_HEIGHT/2.0;
+            double dx=px-wave.sourceX, dy=py-wave.sourceY;
+            double distance=Math.hypot(dx,dy);
+            if(wave.y+WAVE_BAND>=distance){
+                wave.resolved=true;
+                double playerAngle=Math.atan2(dy,dx);
+                if(!ended() && angleDiff(playerAngle,wave.openingAngle)>WAVE_OPEN_HALF_ANGLE){
+                    slowedUntil=Math.max(slowedUntil,frame+SLOW_DURATION);
+                    announce("EMP HIT - MOVEMENT SLOWED",SLOW_DURATION);
+                }
+            }
+        }
+        double maxDistance=Math.hypot(Math.max(wave.sourceX,width-wave.sourceX)+16,height-wave.sourceY+16);
+        if(wave.y-WAVE_BAND>maxDistance)wave=null;
+    }
     private int beamTop(Beam b){return b.mega?getBossBottom()-8:getPortY(b.port);}
     private int beamBottom(Beam b){
         int top=beamTop(b);
@@ -392,13 +473,14 @@ public final class SuperweaponFight {
         try{
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_OFF);
             if(!isWon()){
-                Superweapon.draw(g,width,Superweapon.TOP_Y);
+                drawAnimatedBoss(g);
                 if(isReflecting()){
                     Superweapon.drawOverlay(g,width,Superweapon.TOP_Y,true,(frame/6)%2==0?0.95f:0.5f);
                 }else if(frame<hitFlashUntil || (frame<phaseFlashUntil&&(frame/6)%2==0)){
                     Superweapon.drawOverlay(g,width,Superweapon.TOP_Y,false,0.35f);
                 }
             }
+            if(wave!=null)drawWave(g,wave);
             for(Beam b:beams)drawBeam(g,b);
             for(Bomb b:bombs)drawBomb(g,b);
             for(Drone d:drones)drawDrone(g,d);
@@ -406,6 +488,80 @@ public final class SuperweaponFight {
             for(PlayerShot s:friendly)drawMask(g,PLAYER_BULLET,(int)Math.round(s.x)-3,(int)Math.round(s.y)-5,Color.WHITE,2);
             for(Blast b:blasts)drawBlast(g,b);
         }finally{g.dispose();}
+    }
+    /** Smooth visual state, derived from the same frame clock as the attacks. */
+    private static float recoil(int age,int duration){
+        return age<0||age>=duration?0f:1f-age/(float)duration;
+    }
+    private void drawAnimatedBoss(Graphics2D g){
+        float[] charge=new float[8], kick=new float[8];
+        for(int i=0;i<8;i++)kick[i]=recoil(frame-portFiredAt[i],12);
+        float mainCharge=0f,mainKick=recoil(frame-mainFiredAt,20);
+        for(Beam b:beams){
+            if(frame<b.start||frame>=b.end)continue;
+            float energy=frame<b.fire?.20f+.80f*(frame-b.start)/(float)(b.fire-b.start):1f;
+            float r=frame<b.fire?0f:recoil(frame-b.fire,b.mega?25:14);
+            if(b.mega){mainCharge=Math.max(mainCharge,energy);mainKick=Math.max(mainKick,r);}
+            else {charge[b.port]=Math.max(charge[b.port],energy);kick[b.port]=Math.max(kick[b.port],r);}
+        }
+        Superweapon.drawAnimated(g,width,Superweapon.TOP_Y,frame,isPhaseTwo(),PORT_X,PORT_Y,
+                charge,kick,mainCharge,mainKick,recoil(frame-bayOpenedAt,36));
+    }
+    /** Circular pixel-ring shockwave with a safe opening sector. */
+    private void drawWave(Graphics2D g,SlowWave w){
+        if(frame<w.launch){
+            drawWaveWarning(g,w);
+            return;
+        }
+        drawWaveRing(g,w,w.y,alpha(RED,64),6,2.6);
+        drawWaveRing(g,w,Math.max(0,w.y-6),alpha(RED,150),4,2.15);
+        drawWaveRing(g,w,Math.max(0,w.y-12),new Color(255,205,205),2,1.7);
+    }
+    private void drawWaveWarning(Graphics2D g,SlowWave w){
+        int pulse=(frame/6)%2==0?180:95;
+        drawWaveRing(g,w,10+((frame/5)%3)*2,alpha(RED,pulse),4,2.1);
+        drawWaveRing(g,w,20+((frame/7)%4)*2,alpha(RED,pulse/2),2,1.8);
+        double left=w.openingAngle-WAVE_OPEN_HALF_ANGLE,right=w.openingAngle+WAVE_OPEN_HALF_ANGLE;
+        drawGuideRay(g,w,left,pulse);
+        drawGuideRay(g,w,right,pulse);
+        int safeLeft=w.gapCenter-WAVE_GAP/2,safeRight=w.gapCenter+WAVE_GAP/2;
+        g.setColor(alpha(Color.WHITE,pulse));
+        for(int i=0;i<4;i++){
+            int y=getPlayerY()+PLAYER_HEIGHT+6+i*6;
+            g.fillRect(safeLeft-8,y,6,2);g.fillRect(safeRight+2,y,6,2);
+        }
+    }
+    private void drawGuideRay(Graphics2D g,SlowWave w,double angle,int alpha){
+        for(double r=22;r<height;r+=10){
+            int x=(int)Math.round(w.sourceX+Math.cos(angle)*r);
+            int y=(int)Math.round(w.sourceY+Math.sin(angle)*r);
+            g.setColor(alpha(RED,Math.max(40,alpha-(int)(r*0.35))));
+            g.fillRect(x,y,2,4);
+        }
+    }
+    private void drawWaveRing(Graphics2D g,SlowWave w,double radius,Color color,int samples,double thickness){
+        if(radius<=0)return;
+        double start=w.openingAngle+WAVE_OPEN_HALF_ANGLE;
+        double end=w.openingAngle-WAVE_OPEN_HALF_ANGLE+Math.PI*2;
+        g.setColor(color);
+        for(double ang=start;ang<end;ang+=Math.PI/180.0*samples){
+            for(double off=-thickness;off<=thickness;off+=2.0){
+                double r=radius+off;
+                int x=(int)Math.round(w.sourceX+Math.cos(ang)*r);
+                int y=(int)Math.round(w.sourceY+Math.sin(ang)*r);
+                g.fillRect(x,y,2,2);
+            }
+        }
+        for(int i=0;i<10;i++){
+            double ang=start+(end-start)*(i+.5)/10.0 + Math.sin((frame+i*7)*0.13)*0.05;
+            double r=radius+6+(i%2==0?2:-2);
+            int x=(int)Math.round(w.sourceX+Math.cos(ang)*r);
+            int y=(int)Math.round(w.sourceY+Math.sin(ang)*r);
+            g.fillRect(x,y,2,4);
+        }
+    }
+    private static double angleDiff(double a,double b){
+        return Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
     }
     private static Color alpha(Color c,int a){return new Color(c.getRed(),c.getGreen(),c.getBlue(),a);}
     /** Same layered red glow, white core, charging orb and moving sparks as AI Commander. */
@@ -523,8 +679,8 @@ public final class SuperweaponFight {
         String life=invincible?"TEST: INVINCIBLE":"LIVES: "+getLives();
         g.drawString(life,width-10-g.getFontMetrics().stringWidth(life),16);
         g.setColor(Color.GREEN);g.fillRect(0,40,width,2);
-        g.setColor(isFrozen()?ICE:isVulnerable()?VIOLET:Color.WHITE);
-        String line=isWon()?"SUPERWEAPON DESTROYED - R: RESTART":isLost()?"GAME OVER - R: RESTART":isFrozen()?"FROZEN":isVulnerable()?"VULNERABLE":frame<messageUntil?message:"A/D MOVE | SPACE FIRE | ESC EXIT";
+        g.setColor(isFrozen()?ICE:isSlowed()?AMBER:isVulnerable()?VIOLET:Color.WHITE);
+        String line=isWon()?"SUPERWEAPON DESTROYED - R: RESTART":isLost()?"GAME OVER - R: RESTART":isFrozen()?"FROZEN":isSlowed()?"EMP SLOWED - "+(getSlowFramesRemaining()+59)/60+"s":isVulnerable()?"VULNERABLE":frame<messageUntil?message:"A/D MOVE | SPACE FIRE | ESC EXIT";
         g.setFont(font.deriveFont(10f));g.drawString(line,10,31);
         g.setFont(font);g.setColor(Color.WHITE);
         String label="BOSS";g.drawString(label,(width-g.getFontMetrics().stringWidth(label))/2,64);

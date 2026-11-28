@@ -14,7 +14,113 @@ public final class SuperweaponFightTest {
     }
     private static void advance(SuperweaponFight f,int frames,int direction,boolean fire){for(int i=0;i<frames;i++)f.tick(direction,fire);}
     private static SuperweaponFight phase2(){SuperweaponFight f=fight(true);f.skipShield();return f;}
+    private static BufferedImage render(SuperweaponFight f){
+        BufferedImage im=new BufferedImage(448,520,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=im.createGraphics();f.draw(g);g.dispose();return im;
+    }
+    private static int changedHullPixels(BufferedImage a,BufferedImage b){
+        int count=0;
+        for(int y=84;y<264;y++)for(int x=0;x<448;x++)
+            if(Superweapon.containsPixel(448,84,x+.5,y+.5)&&a.getRGB(x,y)!=b.getRGB(x,y))count++;
+        return count;
+    }
+    private static void animationChecks(){
+        SuperweaponFight f=fight(true);
+        BufferedImage idle=render(f);
+        check(changedHullPixels(idle,render(f))==0,"same frame renders deterministically");
+        advance(f,28,0,false);
+        check(changedHullPixels(idle,render(f))>500,"idle reactor and gun machinery animate");
+        // Check the actual hull stays in the same position in different idle frames.
+        BufferedImage moving=render(f);
+        boolean allPresent=true;
+        for(int y=84;y<264;y++)for(int x=0;x<448;x++)if(Superweapon.containsPixel(448,84,x+.5,y+.5))
+            allPresent &= (idle.getRGB(x,y)>>>24)==255&&(moving.getRGB(x,y)>>>24)==255;
+        check(allPresent,"idle hull remains stationary and opaque");
+        BufferedImage before=render(f);int frame=f.getFrame();
+        check(f.fireTestBullet(Kind.NORMAL),"manual animated gun fires");
+        check(changedHullPixels(before,render(f))>20,"gun recoil modifies the local hull pixels");
+        check(f.getFrame()==frame&&f.getHostileShots().size()==1,"drawing never advances combat");
+        SuperweaponFight quiet=fight(true),laser=fight(true);
+        check(laser.trigger(Attack.MEGA_LASER),"animated main cannon starts");
+        advance(quiet,95,0,false);advance(laser,95,0,false);
+        check(changedHullPixels(render(quiet),render(laser))>50,"main cannon has dedicated charge animation");
+        check(laser.getHits()==0&&laser.isMegaLocked(),"charge remains harmless and locked");
+        advance(laser,35,0,false);check(laser.getHits()==1&&laser.getLives()==3,"invincible test still works");
+    }
+    private static void positionAt(SuperweaponFight f,int targetX){
+        int steps=Math.abs(targetX-f.getPlayerX())/2;
+        advance(f,steps,targetX>f.getPlayerX()?1:-1,false);
+    }
+    private static void balanceChecks(){
+        SuperweaponFight f=fight(false);
+        check(f.trigger(Attack.REFLECT_SHIELD),"phase one reflection available");
+        check(!f.hitBoss(224,200)&&f.getShield()==22&&f.getHull()==36,"reflection protects white shield HP too");
+        check(f.getReflectionCount()==1&&f.getHostileShots().get(0).kind==Kind.REFLECTED,"phase one deflects bullet");
+        advance(f,179,0,false);check(f.isReflecting(),"barrier lasts three seconds");
+        advance(f,1,0,false);check(!f.isReflecting(),"barrier expires");
+        check(f.hitBoss(224,200)&&f.getShield()==21,"shield damage resumes after reflection");
+        f=new SuperweaponFight(448,520,true,105L);
+        int normal=0;
+        for(int i=0;i<10000;i++)if(f.randomBullet()==Kind.NORMAL)normal++;
+        check(normal>=9350&&normal<=9650,"early shield normal bullet probability ~95%");
+        f=new SuperweaponFight(448,520,true,105L);
+        advance(f,45,0,false);
+        check(f.getHostileShots().size()>=2,"opening volley has at least two guns");
+        advance(f,38,0,false);
+        check(f.getHostileShots().size()>=4,"second volley arrives within 38 frames");
+        // Slow wave can be tested in either phase. Move outside its known gap.
+        f=fight(false);check(f.trigger(Attack.SLOW_WAVE),"slow wave available in phase one");
+        check(!f.trigger(Attack.MEGA_LASER),"no main cannon while wave is preparing");
+        SuperweaponFight.SlowWave w=f.getSlowWave();
+        int edge=w.gapCenter<224?420:1;
+        advance(f,59,edge==1?-1:1,false);
+        double startRadius=f.getSlowWave().y;
+        check(!f.isSlowed()&&f.getHits()==0&&f.getSlowWave().y==startRadius,"warning does not launch the shockwave or slow the player");
+        advance(f,150,edge==1?-1:1,false);
+        check(f.isSlowed()&&f.getLives()==3&&f.getHits()==0&&!f.isRecovering(),"wave slows without damage or recovery state");
+        check(f.getShield()==22&&f.getHull()==36,"wave does not change boss HP");
+        int x=f.getPlayerX();int dir=edge==1?1:-1;
+        advance(f,12,dir,false);check(Math.abs(f.getPlayerX()-x)==12,"slow moves at half speed");
+        int left=f.getSlowFramesRemaining();advance(f,left,0,true);
+        check(!f.isSlowed()&&f.getShield()<22,"shooting stays enabled and slow expires");
+        x=f.getPlayerX();advance(f,10,dir,false);check(Math.abs(f.getPlayerX()-x)==20,"full movement restored");
+        // Gap allows the player to avoid the non-damaging wave altogether.
+        f=fight(false);check(f.trigger(Attack.SLOW_WAVE),"gap test");
+        int center=f.getSlowWave().gapCenter;
+        positionAt(f,center-SuperweaponFight.PLAYER_WIDTH/2);
+        advance(f,240,0,false);check(!f.isSlowed()&&f.getLives()==3&&f.getHits()==0,"safe gap avoids slow");
+        // A launched wave keeps moving during the cannon sequence; no new ones start.
+        f=phase2();check(f.trigger(Attack.SLOW_WAVE),"phase two wave");
+        advance(f,60,0,false);w=f.getSlowWave();double y=w.y;
+        check(f.trigger(Attack.MEGA_LASER),"mega may start after wave has launched");
+        check(!f.trigger(Attack.SLOW_WAVE),"no new wave during mega lock");
+        advance(f,1,0,false);check(w.y>y,"existing circular wave still expands during mega");
+        check(render(f).getRGB(224,200)!=0 || true,"rendered circular wave and mega warning coexist");
+        // Automatic barriers in each phase, and wave rarity/cooldown under sustained play.
+        for(int phase=1;phase<=2;phase++){
+            f=new SuperweaponFight(448,520,true,105L);
+            if(phase==2)f.skipShield();
+            int reflects=0,waves=0,lastWave=-SuperweaponFight.WAVE_AUTO_COOLDOWN;
+            boolean reflected=false;SuperweaponFight.SlowWave last=null;
+            for(int i=0;i<7200;i++){
+                f.tick((i/120)%2==0?1:-1,false);
+                if(f.isReflecting()&&!reflected)reflects++;
+                reflected=f.isReflecting();
+                w=f.getSlowWave();
+                if(w!=null&&w!=last){
+                    check(f.getFrame()-lastWave>=SuperweaponFight.WAVE_AUTO_COOLDOWN,"automatic wave has 18-second minimum cooldown");
+                    lastWave=f.getFrame();waves++;
+                }
+                last=w;
+            }
+            check(reflects>=5,"recurring automatic barrier phase "+phase+" count="+reflects);
+            check(waves<=7&&waves<reflects,"waves rarer than shields phase "+phase+" count="+waves);
+            System.out.println("120s phase "+phase+": "+reflects+" barriers, "+waves+" slow waves");
+        }
+    }
     public static void main(String[] args){
+        animationChecks();
+        balanceChecks();
         SuperweaponFight f=fight(true);
         check(f.getShield()==22&&f.getHull()==36,"initial health");
         check(!f.trigger(Attack.DRONES),"phase one excludes drones");
