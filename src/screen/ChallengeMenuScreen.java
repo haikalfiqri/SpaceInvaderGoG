@@ -4,13 +4,16 @@ import java.awt.Color;
 import java.awt.event.KeyEvent;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
+import engine.ChallengeRewards;
 import engine.Cooldown;
 import engine.Core;
 import engine.DailyChallenge;
 import engine.ShardSpace;
 import engine.WeeklyChallenge;
+import skilltree.ShardType;
 
 /**
  * Challenges menu (GOG-102, GOG-44, GOG-49): pick the daily or the weekly
@@ -161,7 +164,8 @@ public class ChallengeMenuScreen extends Screen {
 		this.drawManager.initDrawing(this);
 		this.drawManager.drawScreenTitle(this, "Challenges");
 
-		int y = this.height / 4;
+		// Starts higher than before, so the weekly reward fits (GOG-46).
+		int y = this.height / 5;
 		for (Option option : Option.values()) {
 			boolean isSelected = option == this.selected;
 			Color color = !option.enabled ? DISABLED
@@ -191,7 +195,8 @@ public class ChallengeMenuScreen extends Screen {
 			this.drawManager.drawCenteredRegularString(this, (i + 1) + ". "
 					+ stages.get(i).describe(), y, Color.WHITE);
 		}
-		y += 32;
+		y = drawReward(weekly, y + 26);
+		y += 28;
 		LocalDateTime now = LocalDateTime.now();
 		this.drawManager.drawCenteredRegularString(this, weekly
 				? "New weekly in " + DailyChallenge.formatCountdown(
@@ -229,5 +234,47 @@ public class ChallengeMenuScreen extends Screen {
 		this.drawManager.drawCenteredRegularString(this, "Plays left today: "
 				+ progress.playsLeft(LocalDate.now()) + " / "
 				+ ShardSpace.PLAYS_PER_DAY, y, MUTED);
+	}
+
+	/**
+	 * Draws what clearing the challenge pays (GOG-46), or that this day's
+	 * or week's reward was already paid.
+	 *
+	 * @param weekly
+	 *            True for the weekly challenge.
+	 * @param top
+	 *            First line's y.
+	 * @return y of the last line drawn.
+	 */
+	private int drawReward(final boolean weekly, final int top) {
+		ChallengeRewards rewards = ChallengeRewards.getInstance();
+		LocalDate today = LocalDate.now();
+		if (weekly ? rewards.isWeeklyClaimed(today)
+				: rewards.isDailyClaimed(today)) {
+			this.drawManager.drawCenteredRegularString(this, weekly
+					? "Reward claimed this week" : "Reward claimed today",
+					top, MUTED);
+			return top;
+		}
+		int[] reward = weekly ? ChallengeRewards.WEEKLY
+				: ChallengeRewards.DAILY;
+		List<String> parts = new ArrayList<String>();
+		for (ShardType type : ShardType.values())
+			if (reward[type.ordinal()] > 0)
+				parts.add(reward[type.ordinal()] + " "
+						+ type.getDisplayName());
+		if (weekly)
+			parts.add(Math.round(ChallengeRewards.WEEKLY_MYTHIC_CHANCE * 100)
+					+ "% +1 Mythic");
+		// Three per line, so the weekly reward fits the screen.
+		int y = top;
+		for (int i = 0; i < parts.size(); i += 3) {
+			this.drawManager.drawCenteredRegularString(this,
+					(i == 0 ? "Reward: " : "") + String.join(", ",
+							parts.subList(i, Math.min(parts.size(), i + 3))),
+					y, Color.GREEN);
+			y += 22;
+		}
+		return y - 22;
 	}
 }
