@@ -1044,11 +1044,9 @@ public final class Core {
 			}
 
 			boolean cleared = stagesCleared == stages.size();
-			String reward = !cleared ? null
-					: progress.recordClear(mode,
-							skilltree.ShardWallet.getInstance(),
-							ShardReward.playerFactor(),
-							new java.util.Random());
+			String reward = progress.finishRun(mode, stagesCleared,
+					stages.size(), skilltree.ShardWallet.getInstance(),
+					ShardReward.playerFactor(), new java.util.Random());
 			LOGGER.info(mode.getTitle() + (cleared ? " cleared: " + reward
 					: " failed: " + stagesCleared + "/" + stages.size()));
 
