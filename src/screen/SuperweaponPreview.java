@@ -4,93 +4,96 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
+import java.util.HashSet;
+import java.util.Set;
 
 import engine.Core;
 import engine.Frame;
 import engine.StoryBackgrounds;
 import entity.Ship;
-import entity.Superweapon;
+import entity.SuperweaponFight;
+import entity.SuperweaponFight.Attack;
+import entity.SuperweaponFight.Kind;
 
-/**
- * GOG-105: isolated visual test for the post-Level-40 superweapon.
- * Run this class instead of engine.Core. No profiles, rewards, or fights.
- */
+/** GOG-105: playable sandbox. Run main(), not Core. Does not touch profiles. */
 public final class SuperweaponPreview extends Screen {
-    private static final int WIDTH = 448;
-    private static final int HEIGHT = 520;
-    private static final int FPS = 60;
-    private static final int SHIP_ROW_FROM_BOTTOM = 30;
-
+    private static final int WIDTH=448, HEIGHT=520, FPS=60;
+    private static final Kind[] TEST_BULLETS={Kind.NORMAL,Kind.FREEZE,Kind.FAST,
+            Kind.SPLIT,Kind.VULNERABLE,Kind.ACCELERATED};
+    private final boolean invincible=!"false".equalsIgnoreCase(
+            System.getProperty("superweapon.invincible","true"));
+    private final Set<Integer> held=new HashSet<>();
     private Ship ship;
+    private SuperweaponFight fight;
     private BufferedImage background;
+    private int bulletIndex;
 
-    public SuperweaponPreview(final int width, final int height, final int fps) {
-        super(width, height, fps);
-    }
-
-    public static void main(final String[] args) {
-        Frame frame = new Frame(WIDTH, HEIGHT, Core.SCALE);
-        frame.setTitle("GoG - Superweapon visual preview");
-        try {
+    public SuperweaponPreview(int width,int height,int fps){super(width,height,fps);}
+    public static void main(String[] args){
+        Frame frame=new Frame(WIDTH,HEIGHT,Core.SCALE);
+        frame.setTitle("GoG - Superweapon combat sandbox");
+        try{
             Core.getDrawManager().setFrame(frame);
-            frame.setScreen(new SuperweaponPreview(frame.getWidth(),
-                    frame.getHeight(), FPS));
-        } finally {
-            frame.dispose();
-        }
+            frame.setScreen(new SuperweaponPreview(frame.getWidth(),frame.getHeight(),FPS));
+        }finally{frame.dispose();}
     }
-
-    @Override
-    public void initialize() {
-        ship = new Ship(0, this.height - SHIP_ROW_FROM_BOTTOM);
-        ship.setPositionX((this.width - ship.getWidth()) / 2);
-        // Use the real Level 40 background, without starting its fight.
-        background = StoryBackgrounds.forLevel(40);
+    @Override public void initialize(){
+        background=StoryBackgrounds.forLevel(40);
+        reset();
+        System.out.println("Superweapon preview: A/D move, Space shoot, Esc exit, R restart");
+        System.out.println("F2 skip shield | T toggle auto | Q cycle projectile | 1-9/0 attacks");
+        System.out.println("1 single, 2 all, 3 mega, 4 bomb, 5 drones, 6 homing,");
+        System.out.println("7 left->right, 8 right->left, 9 convergence, 0 reflection");
     }
-
-    @Override
-    protected void update() {
-        if (inputManager.isKeyDown(KeyEvent.VK_ESCAPE)) {
-            this.isRunning = false;
-            return;
+    private void reset(){
+        fight=new SuperweaponFight(width,height,invincible,System.nanoTime());
+        ship=new Ship(fight.getPlayerX(),fight.getPlayerY());bulletIndex=0;
+    }
+    private boolean pressed(int key){
+        if(inputManager.isKeyDown(key))return held.add(key);
+        held.remove(key);return false;
+    }
+    @Override protected void update(){
+        if(inputManager.isKeyDown(KeyEvent.VK_ESCAPE)){isRunning=false;return;}
+        if(pressed(KeyEvent.VK_R))reset();
+        if(pressed(KeyEvent.VK_F2))fight.skipShield();
+        if(pressed(KeyEvent.VK_T)){
+            fight.setAutomatic(!fight.isAutomatic());
+            System.out.println("Automatic attacks: "+fight.isAutomatic());
         }
-
-        boolean left = inputManager.isKeyDown(KeyEvent.VK_LEFT)
-                || inputManager.isKeyDown(KeyEvent.VK_A);
-        boolean right = inputManager.isKeyDown(KeyEvent.VK_RIGHT)
-                || inputManager.isKeyDown(KeyEvent.VK_D);
-        if (left && !right) ship.moveLeft();
-        if (right && !left) ship.moveRight();
-        ship.setPositionX(Math.max(1, Math.min(this.width - ship.getWidth() - 1,
-                ship.getPositionX())));
+        if(pressed(KeyEvent.VK_Q)){
+            Kind k=TEST_BULLETS[bulletIndex%TEST_BULLETS.length];
+            if(fight.fireTestBullet(k)){bulletIndex++;System.out.println("Bullet: "+k);}
+        }
+        int[] keys={KeyEvent.VK_1,KeyEvent.VK_2,KeyEvent.VK_3,KeyEvent.VK_4,
+                KeyEvent.VK_5,KeyEvent.VK_6,KeyEvent.VK_7,KeyEvent.VK_8,KeyEvent.VK_9,KeyEvent.VK_0};
+        Attack[] attacks=Attack.values();
+        for(int i=0;i<keys.length;i++)if(pressed(keys[i])){
+            boolean ok=fight.trigger(attacks[i]);
+            System.out.println(attacks[i]+(ok?" triggered":" unavailable (phase/cooldown/active attack)"));
+        }
+        boolean left=inputManager.isKeyDown(KeyEvent.VK_LEFT)||inputManager.isKeyDown(KeyEvent.VK_A);
+        boolean right=inputManager.isKeyDown(KeyEvent.VK_RIGHT)||inputManager.isKeyDown(KeyEvent.VK_D);
+        fight.tick((right?1:0)-(left?1:0),inputManager.isKeyDown(KeyEvent.VK_SPACE));
+        ship.setPositionX(fight.getPlayerX());ship.setPositionY(fight.getPlayerY());
+        ship.setSkinColor(fight.isFrozen()?new Color(74,185,232):Color.GREEN);
         ship.update();
         draw();
     }
-
-    private void draw() {
+    private void draw(){
         drawManager.initDrawing(this);
-        if (background != null) drawManager.drawBackground(this, background);
-
-        // The only new artwork is the text-based ship. It never moves.
-        Superweapon.draw(drawManager.getWorldGraphics(), this.width, Superweapon.TOP_Y);
-        drawManager.drawEntity(ship, ship.getPositionX(), ship.getPositionY());
-
-        // Temporary HUD, separate from normal gameplay and boss health.
-        Graphics2D g = (Graphics2D) drawManager.getWorldGraphics().create();
-        try {
-            g.setColor(new Color(13, 12, 21));
-            g.fillRect(0, 0, this.width, Superweapon.TOP_Y);
-            g.setColor(new Color(110, 48, 55));
-            g.drawLine(0, Superweapon.TOP_Y - 1, this.width - 1,
-                    Superweapon.TOP_Y - 1);
-        } finally {
-            g.dispose();
-        }
-        drawManager.drawRegularString("SUPERWEAPON / ART PREVIEW", 12, 21, Color.WHITE);
-        drawManager.drawRegularString("A/D or arrows: move | ESC: exit", 12, 43,
-                new Color(182, 179, 196));
-        drawManager.drawRegularString("NO COMBAT - VISUAL TEST ONLY", 12, 65,
-                new Color(255, 128, 95));
+        if(background!=null)drawManager.drawBackground(this,background);
+        Graphics2D g=drawManager.getWorldGraphics();
+        fight.draw(g);
+        if(!fight.isLost()&&(!fight.isRecovering()||(fight.getFrame()/6)%2==0))
+            drawManager.drawEntity(ship,ship.getPositionX(),ship.getPositionY());
+        Graphics2D hud=(Graphics2D)g.create();
+        try{
+            fight.drawHud(hud);
+            hud.setColor(new Color(155,145,164));
+            hud.setFont(new java.awt.Font(java.awt.Font.MONOSPACED,java.awt.Font.PLAIN,10));
+            hud.drawString(fight.isAutomatic()?"AUTO ON":"AUTO OFF",width-65,69);
+        }finally{hud.dispose();}
         drawManager.completeDrawing(this);
     }
 }
