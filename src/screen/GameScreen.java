@@ -388,6 +388,15 @@ public class GameScreen extends Screen {
 				: engine.StoryBackgrounds.forLevel(this.level);
 		this.backgroundEffects = this.storyBackground == null ? null
 				: new engine.StoryBackgroundEffects(this.level, this.storyBackground);
+		// GOG-49: each Shard Space mode can have its own background (Wafi).
+		java.awt.image.BufferedImage shardBackground = engine.ShardSpace
+				.isRunning() ? engine.ShardSpaceBackgrounds.forMode(
+						engine.ShardSpace.activeMode()) : null;
+		if (shardBackground != null) {
+			this.storyBackground = shardBackground;
+			this.backgroundEffects = new engine.StoryBackgroundEffects(
+					this.level, shardBackground);
+		}
 		this.score = gameState.getScore();
 		this.lives = gameState.getLivesRemaining();
 		if (this.bonusLife)
@@ -456,13 +465,25 @@ public class GameScreen extends Screen {
 			else
 				this.midBoss = new FinalBoss(this.width / 2 - 24, 60,
 						DrawManager.SpriteType.FinalBoss1);
+			// GOG-49: the Shard Space boss replaces the story boss (Ammar).
+			if (engine.ShardSpace.isRunning()) {
+				Boss shardBoss = engine.ShardSpaceBosses.create(
+						engine.ShardSpace.activeMode(), this.width);
+				if (shardBoss != null)
+					this.midBoss = shardBoss;
+			}
 			this.bossFightStarted = false;
 		} else {
 			// Act 1 (story levels 1-10) uses the Earth Escape enemies.
 			boolean earthAct = !EndlessMode.isEnabled()
 					&& this.level >= 1 && this.level <= 10;
-			this.enemyShipFormation = new EnemyShipFormation(
-					this.gameSettings, earthAct);
+			// GOG-49: Shard Space waves can have their own enemies (Ammar).
+			EnemyShipFormation shardWave = engine.ShardSpace.isRunning()
+					? engine.ShardSpaceEnemies.createFormation(
+							this.gameSettings, engine.ShardSpace.activeMode())
+					: null;
+			this.enemyShipFormation = shardWave != null ? shardWave
+					: new EnemyShipFormation(this.gameSettings, earthAct);
 			this.enemyShipFormation.attach(this);
 		}
 		// Skin chosen in Customize (GoG - Currency System).
