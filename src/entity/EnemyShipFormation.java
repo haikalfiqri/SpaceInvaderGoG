@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.logging.Logger;
 
@@ -15,12 +16,13 @@ import engine.Core;
 import engine.DrawManager;
 import engine.DrawManager.SpriteType;
 import engine.GameSettings;
+import engine.FormationTactics;
 
 /**
  * Groups enemy ships into a formation that moves together.
- * 
+ *
  * @author <a href="mailto:RobertoIA1987@gmail.com">Roberto Izquierdo Amo</a>
- * 
+ *
  */
 public class EnemyShipFormation implements Iterable<EnemyShip> {
 
@@ -98,6 +100,11 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	private int shipHeight;
 	/** List of ships that are able to shoot. */
 	private List<EnemyShip> shooters;
+	/** GOG-105: formation tactics do not modify the individual enemy abilities. */
+	private final FormationTactics tactics;
+	private final Random volleyRandom = new Random();
+	private long volleyNumber;
+	private long formationTick;
 	/** Number of not destroyed ships. */
 	private int shipCount;
 
@@ -131,7 +138,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 		private final int targetY;
 
 		Dive(final EnemyShip ship, final int targetX, final int targetY,
-				final boolean drop) {
+		     final boolean drop) {
 			this.ship = ship;
 			this.drop = drop;
 			this.centerX = ship.getPositionX() + ship.getWidth() / 2.0;
@@ -163,7 +170,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 
 	/**
 	 * Constructor, sets the initial conditions.
-	 * 
+	 *
 	 * @param gameSettings
 	 *            Current game settings.
 	 */
@@ -192,13 +199,14 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 *            so the settings' two-hit enemies are ignored.
 	 */
 	public EnemyShipFormation(final GameSettings gameSettings,
-			final boolean earthAct) {
+	                          final boolean earthAct) {
 		this.drawManager = Core.getDrawManager();
 		this.logger = Core.getLogger();
 		this.enemyShips = new ArrayList<List<EnemyShip>>();
 		this.currentDirection = Direction.RIGHT;
 		this.movementInterval = 0;
 		this.diagonalMovement = gameSettings.isDiagonalMovement();
+		this.tactics = gameSettings.getFormationTactics();
 		this.diagonalStepX = X_SPEED;
 		this.diagonalStepY = Y_SPEED;
 		this.diagonalOffset = 0;
@@ -283,7 +291,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 
 	/**
 	 * Associates the formation to a given screen.
-	 * 
+	 *
 	 * @param newScreen
 	 *            Screen to attach.
 	 */
@@ -365,11 +373,11 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 			boolean overlap = ship.getPositionX() < player.getPositionX()
 					+ player.getWidth()
 					&& player.getPositionX() < ship.getPositionX()
-							+ ship.getWidth()
+					+ ship.getWidth()
 					&& ship.getPositionY() < player.getPositionY()
-							+ player.getHeight()
+					+ player.getHeight()
 					&& player.getPositionY() < ship.getPositionY()
-							+ ship.getHeight();
+					+ ship.getHeight();
 			if (!overlap)
 				continue;
 			ship.destroy();
@@ -512,8 +520,14 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 					shootingVariance);
 			this.shootingCooldown.reset();
 		}
-		
+
 		cleanUp();
+		// Detached Comets / Orbit Fighters are updated separately. If only
+		// they remain, there is no formation left to move or shoot.
+		if (this.enemyShips.isEmpty()) {
+			return;
+		}
+		this.formationTick++;
 
 		int movementX = 0;
 		int movementY = 0;
@@ -522,7 +536,22 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 		this.movementSpeed = (int) (Math.pow(remainingProportion, 2)
 				* this.baseSpeed);
 		this.movementSpeed += MINIMUM_SPEED;
-		
+		this.movementSpeed = this.tactics.movementInterval(this.movementSpeed,
+				this.formationTick);
+		// A late-game feint reverses the whole formation away from the edges.
+		// It never moves individual rows or interrupts a classic descent.
+		if (this.tactics.shouldFeint(this.formationTick)
+				&& this.positionX > SIDE_MARGIN + X_SPEED
+				&& this.positionX + this.width < screen.getWidth() - SIDE_MARGIN - X_SPEED) {
+			if (this.diagonalMovement) {
+				this.diagonalStepX = -this.diagonalStepX;
+			} else if (this.currentDirection == Direction.RIGHT) {
+				this.currentDirection = Direction.LEFT;
+			} else if (this.currentDirection == Direction.LEFT) {
+				this.currentDirection = Direction.RIGHT;
+			}
+		}
+
 		movementInterval++;
 		if (movementInterval >= this.movementSpeed) {
 			movementInterval = 0;
@@ -570,7 +599,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 			if (this.diagonalMovement) {
 				movementX = this.diagonalStepX;
 				movementY = this.nextDiagonalStepY(isAtBottom);
-			} 
+			}
 			else if (currentDirection == Direction.RIGHT)
 				movementX = X_SPEED;
 			else if (currentDirection == Direction.LEFT)
@@ -608,7 +637,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 * moves sideways and up and down at the same time. Touching a side
 	 * reverses the horizontal direction and makes the formation sink a bit,
 	 * like the classic movement does.
-	 * 
+	 *
 	 * @param isAtLeftSide
 	 *            True if the formation touches the left margin.
 	 * @param isAtRightSide
@@ -617,7 +646,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 *            True if the formation reached the lower boundary.
 	 */
 	private void advanceDiagonal(final boolean isAtLeftSide,
-			final boolean isAtRightSide, final boolean isAtBottom) {
+	                             final boolean isAtRightSide, final boolean isAtBottom) {
 		if (isAtLeftSide && this.diagonalStepX < 0) {
 			this.diagonalStepX = X_SPEED;
 			if (!isAtBottom)
@@ -634,7 +663,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 * the range and DIAGONAL_RANGE pixels below it, plus the sinking after
 	 * touching a side. The formation never moves down once it is at the
 	 * lower boundary.
-	 * 
+	 *
 	 * @param isAtBottom
 	 *            True if the formation reached the lower boundary.
 	 * @return Pixels to move down, negative to move up.
@@ -655,7 +684,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 		}
 		return stepY;
 	}
-	
+
 	/**
 	 * Removes destroyed ships from the formation. Used by the game over
 	 * sequence, while the formation is no longer updated.
@@ -710,7 +739,18 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 * Cleans empty columns, adjusts the width and height of the formation.
 	 */
 	private void cleanUp() {
-		Set<Integer> emptyColumns = new HashSet<Integer>();
+		// Remove by iterator rather than shifting several saved indices.
+		Iterator<List<EnemyShip>> columns = this.enemyShips.iterator();
+		while (columns.hasNext()) {
+			if (columns.next().isEmpty()) {
+				columns.remove();
+			}
+		}
+		if (this.enemyShips.isEmpty()) {
+			this.width = 0;
+			this.height = 0;
+			return;
+		}
 		int maxColumn = 0;
 		int minPositionY = Integer.MAX_VALUE;
 		for (List<EnemyShip> column : this.enemyShips) {
@@ -721,19 +761,12 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 				maxColumn = Math.max(maxColumn, columnSize);
 				minPositionY = Math.min(minPositionY, column.get(0)
 						.getPositionY());
-			} else {
-				// Empty column, we remove it.
-				emptyColumns.add(this.enemyShips.indexOf(column));
 			}
-		}
-		for (int index : emptyColumns) {
-			this.enemyShips.remove(index);
-			logger.info("Removed column " + index);
 		}
 
 		int leftMostPoint = 0;
 		int rightMostPoint = 0;
-		
+
 		for (List<EnemyShip> column : this.enemyShips) {
 			if (!column.isEmpty()) {
 				if (leftMostPoint == 0)
@@ -751,18 +784,33 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 
 	/**
 	 * Shoots a bullet downwards.
-	 * 
+	 *
 	 * @param bullets
 	 *            Bullets set to add the bullet being shot.
 	 */
 	public final void shoot(final Set<Bullet> bullets) {
-		// For now, only ships in the bottom row are able to shoot.
-		int index = (int) (Math.random() * this.shooters.size());
-		EnemyShip shooter = this.shooters.get(index);
-
-		if (this.shootingCooldown.checkFinished()) {
-			this.shootingCooldown.reset();
-			fireShot(shooter, bullets, this.targetX, this.targetY);
+		// A formation may have no shooters while its detached enemies dive.
+		if (this.shootingCooldown == null || this.shooters.isEmpty()
+				|| !this.shootingCooldown.checkFinished()) {
+			return;
+		}
+		List<EnemyShip> available = new ArrayList<EnemyShip>();
+		for (EnemyShip shooter : this.shooters) {
+			if (!shooter.isDestroyed()) {
+				available.add(shooter);
+			}
+		}
+		if (available.isEmpty()) {
+			return;
+		}
+		// Keep one eligible shooter per column, in left-to-right order.
+		available.sort(java.util.Comparator.comparingInt(EnemyShip::getPositionX));
+		this.shootingCooldown.reset();
+		int[] selected = this.tactics.chooseShooters(available.size(),
+				this.volleyNumber++, this.volleyRandom);
+		for (int index : selected) {
+			// The original fireShot handles Jelly, Polar, Stinger, snipers, etc.
+			fireShot(available.get(index), bullets, this.targetX, this.targetY);
 		}
 	}
 
@@ -790,7 +838,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 *            Where the reflected bullet is added.
 	 */
 	public final void reflectShot(final Bullet hitBy,
-			final Set<Bullet> bullets) {
+	                              final Set<Bullet> bullets) {
 		bullets.add(aimedBullet(hitBy.getPositionX() + hitBy.getWidth() / 2,
 				hitBy.getPositionY() + hitBy.getHeight(), this.targetX,
 				this.targetY, EnemyType.REFLECT_BULLET_SPEED));
@@ -802,7 +850,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 *         below it, the bullet goes straight down.
 	 */
 	private static Bullet aimedBullet(final int fromX, final int fromY,
-			final int toX, final int toY, final int speed) {
+	                                  final int toX, final int toY, final int speed) {
 		int speedX = 0;
 		int speedY = speed;
 		if (toX >= 0 && toY > fromY) {
@@ -828,7 +876,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 *            Bullets in play, the new ones are added here.
 	 */
 	public static void fireShot(final EnemyShip shooter,
-			final Set<Bullet> bullets) {
+	                            final Set<Bullet> bullets) {
 		fireShot(shooter, bullets, -1, -1);
 	}
 
@@ -847,47 +895,47 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 	 *            Player centre, negative if unknown.
 	 */
 	public static void fireShot(final EnemyShip shooter,
-			final Set<Bullet> bullets, final int targetX, final int targetY) {
+	                            final Set<Bullet> bullets, final int targetX, final int targetY) {
 		int centerX = shooter.getPositionX() + shooter.width / 2;
 		int y = shooter.getPositionY();
 		switch (shooter.getType()) {
-		case HALO_LANCER:
-			// Sniper: fast and aimed at the player, no warning (GOG-85).
-			bullets.add(aimedBullet(centerX, y, targetX, targetY,
-					EnemyType.SNIPER_BULLET_SPEED));
-			break;
-		case JELLY:
-			// Double shot: two bullets spreading in a cone (GOG-84).
-			Bullet left = BulletPool.getBullet(centerX, y, BULLET_SPEED);
-			left.setSpeedX(-EnemyType.DOUBLE_SHOT_SPREAD);
-			bullets.add(left);
-			Bullet right = BulletPool.getBullet(centerX, y, BULLET_SPEED);
-			right.setSpeedX(EnemyType.DOUBLE_SHOT_SPREAD);
-			bullets.add(right);
-			break;
-		case POLAR:
-			// Freeze bullet: locks the ship instead of taking a life.
-			Bullet freezeBullet = BulletPool.getBullet(centerX, y,
-					BULLET_SPEED);
-			freezeBullet.setFreezing(true);
-			bullets.add(freezeBullet);
-			break;
-		case STINGER:
-			// Vulnerable bullet: leaves the player at 1 life (GOG-86).
-			Bullet vulnerableBullet = BulletPool.getBullet(centerX, y,
-					BULLET_SPEED);
-			vulnerableBullet.setVulnerable(true);
-			bullets.add(vulnerableBullet);
-			break;
-		default:
-			bullets.add(BulletPool.getBullet(centerX, y, BULLET_SPEED));
-			break;
+			case HALO_LANCER:
+				// Sniper: fast and aimed at the player, no warning (GOG-85).
+				bullets.add(aimedBullet(centerX, y, targetX, targetY,
+						EnemyType.SNIPER_BULLET_SPEED));
+				break;
+			case JELLY:
+				// Double shot: two bullets spreading in a cone (GOG-84).
+				Bullet left = BulletPool.getBullet(centerX, y, BULLET_SPEED);
+				left.setSpeedX(-EnemyType.DOUBLE_SHOT_SPREAD);
+				bullets.add(left);
+				Bullet right = BulletPool.getBullet(centerX, y, BULLET_SPEED);
+				right.setSpeedX(EnemyType.DOUBLE_SHOT_SPREAD);
+				bullets.add(right);
+				break;
+			case POLAR:
+				// Freeze bullet: locks the ship instead of taking a life.
+				Bullet freezeBullet = BulletPool.getBullet(centerX, y,
+						BULLET_SPEED);
+				freezeBullet.setFreezing(true);
+				bullets.add(freezeBullet);
+				break;
+			case STINGER:
+				// Vulnerable bullet: leaves the player at 1 life (GOG-86).
+				Bullet vulnerableBullet = BulletPool.getBullet(centerX, y,
+						BULLET_SPEED);
+				vulnerableBullet.setVulnerable(true);
+				bullets.add(vulnerableBullet);
+				break;
+			default:
+				bullets.add(BulletPool.getBullet(centerX, y, BULLET_SPEED));
+				break;
 		}
 	}
 
 	/**
 	 * Destroys a ship.
-	 * 
+	 *
 	 * @param destroyedShip
 	 *            Ship to be destroyed.
 	 */
@@ -945,7 +993,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 
 	/**
 	 * Gets the ship on a given column that will be in charge of shooting.
-	 * 
+	 *
 	 * @param column
 	 *            Column to search.
 	 * @return New shooter ship.
@@ -964,7 +1012,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 
 	/**
 	 * Returns an iterator over the ships in the formation.
-	 * 
+	 *
 	 * @return Iterator over the enemy ships.
 	 */
 	@Override
@@ -982,7 +1030,7 @@ public class EnemyShipFormation implements Iterable<EnemyShip> {
 
 	/**
 	 * Checks if there are any ships remaining.
-	 * 
+	 *
 	 * @return True when all ships have been destroyed.
 	 */
 	public final boolean isEmpty() {

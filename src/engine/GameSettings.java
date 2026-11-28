@@ -28,6 +28,9 @@ public class GameSettings {
 	 */
 	private EnemyType[] rowTypes;
 
+	/** GOG-105: defaults to the original single-shooter, steady behaviour. */
+	private FormationTactics formationTactics = FormationTactics.CLASSIC;
+
 	/**
 	 * Constructor.
 	 *
@@ -41,25 +44,25 @@ public class GameSettings {
 	 *            Frecuency of enemy shootings, +/- 30%.
 	 */
 	public GameSettings(final int formationWidth, final int formationHeight,
-			final int baseSpeed, final int shootingFrecuency) {
+	                    final int baseSpeed, final int shootingFrecuency) {
 		this(formationWidth, formationHeight, baseSpeed, shootingFrecuency, false, 0);
 	}
 
 	/** Creates stage settings with a small, configurable two-hit enemy count. */
 	public GameSettings(final int formationWidth, final int formationHeight,
-			final int baseSpeed, final int shootingFrecuency,
-			final int twoHitEnemyCount) {
+	                    final int baseSpeed, final int shootingFrecuency,
+	                    final int twoHitEnemyCount) {
 		this(formationWidth, formationHeight, baseSpeed, shootingFrecuency,
 				false, twoHitEnemyCount);
 	}
 
 	/** Configures movement and health variations independently, or together. */
 	public GameSettings(final int formationWidth, final int formationHeight,
-			final int baseSpeed, final int shootingFrecuency,
-			final boolean diagonalMovement, final int twoHitEnemyCount) {
+	                    final int baseSpeed, final int shootingFrecuency,
+	                    final boolean diagonalMovement, final int twoHitEnemyCount) {
 		if (twoHitEnemyCount < 0
 				|| (twoHitEnemyCount > 0
-						&& twoHitEnemyCount >= formationWidth * formationHeight))
+				&& twoHitEnemyCount >= formationWidth * formationHeight))
 			throw new IllegalArgumentException(
 					"Two-hit enemies must leave at least one ordinary enemy");
 		this.twoHitEnemyCount = twoHitEnemyCount;
@@ -85,8 +88,8 @@ public class GameSettings {
 	 *            True if the whole formation moves diagonally.
 	 */
 	public GameSettings(final int formationWidth, final int formationHeight,
-			final int baseSpeed, final int shootingFrecuency,
-			final boolean diagonalMovement) {
+	                    final int baseSpeed, final int shootingFrecuency,
+	                    final boolean diagonalMovement) {
 		this(formationWidth, formationHeight, baseSpeed, shootingFrecuency,
 				diagonalMovement, 0);
 	}
@@ -147,6 +150,16 @@ public class GameSettings {
 	 */
 	public final EnemyType getRowType(final int row) {
 		return this.rowTypes == null ? EnemyType.NORMAL : this.rowTypes[row];
+	}
+
+	/** Configure formation-level firing and movement without changing enemy skills. */
+	public final GameSettings withFormationTactics(final FormationTactics tactics) {
+		this.formationTactics = java.util.Objects.requireNonNull(tactics);
+		return this;
+	}
+
+	public final FormationTactics getFormationTactics() {
+		return this.formationTactics;
 	}
 
 	/**

@@ -200,7 +200,10 @@ public final class StoryMode {
     public static GameSettings getSettings(final int level) {
         validateLevel(level);
 
-        return SETTINGS.get(level - 1);
+        GameSettings original = SETTINGS.get(level - 1);
+        // Daily and Weekly both set this flag. Preserve their original balance.
+        return DailyChallenge.isRunning() ? original
+                : StoryDifficulty.rebalance(level, original);
     }
 
     private static void validateLevel(final int level) {
@@ -634,9 +637,8 @@ public final class StoryMode {
      *
      * Levels 1-10 preserve the original settings.
      *
-     * Levels 11-40 use temporary difficulty
-     * progression until their unique enemies
-     * and boss mechanics are implemented.
+     * These baseline settings are retained for challenges and bosses.
+     * GOG-105 applies the Story-only rebalancing in getSettings().
      */
     private static List<GameSettings> createSettings() {
 
@@ -769,7 +771,7 @@ public final class StoryMode {
             // GOG-86: Act 4 levels 31-39 use the Deep Space enemies.
             EnemyType[][] actRows = chapter == 2 ? ACT2_ROWS
                     : chapter == 3 ? ACT3_ROWS
-                    : chapter == 4 ? ACT4_ROWS : null;
+                      : chapter == 4 ? ACT4_ROWS : null;
             if (actRows != null && stage <= actRows.length) {
                 EnemyType[] rows = actRows[stage - 1];
                 settings.add(
