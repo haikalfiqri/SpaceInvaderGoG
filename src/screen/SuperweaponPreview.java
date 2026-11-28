@@ -89,10 +89,10 @@ public final class SuperweaponPreview extends Screen {
             drawManager.drawEntity(ship,ship.getPositionX(),ship.getPositionY());
         Graphics2D hud=(Graphics2D)g.create();
         try{
-            fight.drawHud(hud);
+            fight.drawHud(hud,drawManager.getPixelFont(12f,false));
             hud.setColor(new Color(155,145,164));
             hud.setFont(new java.awt.Font(java.awt.Font.MONOSPACED,java.awt.Font.PLAIN,10));
-            hud.drawString(fight.isAutomatic()?"AUTO ON":"AUTO OFF",width-65,69);
+            hud.drawString(fight.isAutomatic()?"AUTO ON":"AUTO OFF",width-65,54);
         }finally{hud.dispose();}
         drawManager.completeDrawing(this);
     }

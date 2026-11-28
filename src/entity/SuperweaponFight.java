@@ -1,6 +1,10 @@
 package entity;
 
 import java.awt.Color;
+import java.awt.AlphaComposite;
+import java.awt.LinearGradientPaint;
+import java.awt.RadialGradientPaint;
+import java.awt.geom.Ellipse2D;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -29,7 +33,7 @@ public final class SuperweaponFight {
     private static final int[] PORT_X = {7,36,63,87,136,160,187,217};
     private static final int[] PORT_Y = {49,62,73,82,82,73,62,49};
     private static final int[] LASER_ORDER = {0,1,2,3,4,5,6,7};
-    private static final Color RED = new Color(239,49,54);
+    private static final Color RED = new Color(0xff2838);
     private static final Color ICE = new Color(74,185,232);
     private static final Color VIOLET = new Color(185,138,255);
     private static final Color AMBER = new Color(255,172,65);
@@ -93,6 +97,7 @@ public final class SuperweaponFight {
     private int frame, nextVolley=45, nextSpecial=120, nextPlayerShot;
     private int protectedUntil, frozenUntil, vulnerableUntil, reflectiveUntil, phaseFlashUntil;
     private int hits, bombsDisarmed, reflectionCount;
+    private int hitFlashUntil;
     private boolean automatic=true, megaStarted;
     private double playerX;
     private String message="SHIELD PHASE";
@@ -119,7 +124,7 @@ public final class SuperweaponFight {
     public boolean isRecovering(){return frame<protectedUntil;}
     public boolean isFrozen(){return frame<frozenUntil;}
     public boolean isVulnerable(){return frame<vulnerableUntil;}
-    public boolean isReflecting(){return frame<reflectiveUntil && !isWon();}
+    public boolean isReflecting(){return frame<reflectiveUntil && !isWon() && !isMegaLocked();}
     public boolean isAutomatic(){return automatic;}
     public void setAutomatic(boolean value){automatic=value;}
     public List<Shot> getHostileShots(){return Collections.unmodifiableList(hostile);}
@@ -148,6 +153,7 @@ public final class SuperweaponFight {
             reflectionCount++;
             return false;
         }
+        hitFlashUntil=frame+5;
         if(shield>0){if(--shield==0)beginPhaseTwo();}
         else if(--hull==0){
             hostile.clear();beams.clear();bombs.clear();drones.clear();friendly.clear();
@@ -190,7 +196,7 @@ public final class SuperweaponFight {
                 for(int i=0;i<count;i++){
                     double x=(i+1)*width/(double)(count+1);
                     drones.add(new Drone(x,getBossBottom()+12,getBossBottom()+48+(i%2)*25,
-                        (i%2==0?1:-1)*(.85+random.nextDouble()*.45),types[(i+rotation)%types.length],frame+60+i*15));
+                            (i%2==0?1:-1)*(.85+random.nextDouble()*.45),types[(i+rotation)%types.length],frame+60+i*15));
                 }
                 announce("ESCORTS DEPLOYED",120);break;
             case HOMING:
@@ -219,8 +225,8 @@ public final class SuperweaponFight {
     private void updateMega(){
         boolean locked=isMegaLocked();
         if(locked&&!megaStarted){
-            // Clear lingering hazards so the player has a fair, unobstructed dodge.
-            hostile.clear();bombs.clear();reflectiveUntil=0;
+            // Existing bullets and bombs keep travelling. Only new attacks are locked.
+            reflectiveUntil=0;
             announce("MAIN CANNON CHARGING - MOVE TO THE SIDE",MEGA_LASER_CHARGE+MEGA_LASER_ACTIVE);
         }
         if(!locked&&megaStarted){nextVolley=frame+40;for(Drone d:drones)d.nextShot=frame+60;}
@@ -342,12 +348,18 @@ public final class SuperweaponFight {
             }
         }
     }
+    private int beamTop(Beam b){return b.mega?getBossBottom()-8:getPortY(b.port);}
+    private int beamBottom(Beam b){
+        int top=beamTop(b);
+        double grow=Math.max(0,Math.min(1,(frame-b.fire+1)/(double)(b.mega?10:5)));
+        return top+(int)Math.round((height-top)*grow);
+    }
     private void updateBeams(){
         for(Beam b:beams){
             if(frame<b.fire||frame>=b.end)continue;
             double x=b.mega?width/2.0:getPortX(b.port);
             double half=b.mega?width*.17:(isPhaseTwo()?8:6);
-            if(playerX+PLAYER_WIDTH>=x-half&&playerX<=x+half)damagePlayer();
+            if(beamBottom(b)>=getPlayerY() && playerX+PLAYER_WIDTH>=x-half&&playerX<=x+half)damagePlayer();
         }
     }
     private void updatePlayerShots(){
@@ -382,80 +394,147 @@ public final class SuperweaponFight {
             if(!isWon()){
                 Superweapon.draw(g,width,Superweapon.TOP_Y);
                 if(isReflecting()){
-                    g.setColor(new Color(122,224,255,64));g.fillRect(0,Superweapon.TOP_Y,width,getBossBottom()-Superweapon.TOP_Y+8);
-                    g.setColor(new Color(157,235,255));g.fillRect(0,getBossBottom()+6,width,3);
-                    g.setFont(new Font(Font.MONOSPACED,Font.BOLD,12));g.drawString("REFLECTING",width/2-38,getBossBottom()+20);
-                }else if(frame<phaseFlashUntil&&(frame/6)%2==0){
-                    g.setColor(new Color(255,55,35,55));g.fillRect(0,Superweapon.TOP_Y,width,getBossBottom()-Superweapon.TOP_Y);
+                    Superweapon.drawOverlay(g,width,Superweapon.TOP_Y,true,(frame/6)%2==0?0.95f:0.5f);
+                }else if(frame<hitFlashUntil || (frame<phaseFlashUntil&&(frame/6)%2==0)){
+                    Superweapon.drawOverlay(g,width,Superweapon.TOP_Y,false,0.35f);
                 }
             }
             for(Beam b:beams)drawBeam(g,b);
             for(Bomb b:bombs)drawBomb(g,b);
             for(Drone d:drones)drawDrone(g,d);
             for(Shot s:hostile)drawShot(g,s);
-            for(PlayerShot s:friendly){g.setColor(new Color(90,255,128));g.fillRect((int)s.x-2,(int)s.y-5,4,10);}
-            for(Blast b:blasts){int r=b.harmless?13:BOMB_RADIUS;g.setColor(new Color(255,125,25,110));g.fillOval((int)b.x-r,(int)b.y-r,r*2,r*2);g.setColor(AMBER);g.drawOval((int)b.x-r,(int)b.y-r,r*2,r*2);}
+            for(PlayerShot s:friendly)drawMask(g,PLAYER_BULLET,(int)Math.round(s.x)-3,(int)Math.round(s.y)-5,Color.WHITE,2);
+            for(Blast b:blasts)drawBlast(g,b);
         }finally{g.dispose();}
     }
+    private static Color alpha(Color c,int a){return new Color(c.getRed(),c.getGreen(),c.getBlue(),a);}
+    /** Same layered red glow, white core, charging orb and moving sparks as AI Commander. */
     private void drawBeam(Graphics2D g,Beam b){
         if(frame<b.start||frame>=b.end)return;
-        int x=b.mega?width/2:getPortX(b.port),y=b.mega?getBossBottom()-8:getPortY(b.port);
+        int x=b.mega?width/2:getPortX(b.port),y=beamTop(b);
         int half=b.mega?(int)(width*.17):(isPhaseTwo()?8:6);
         if(frame<b.fire){
             double p=(frame-b.start)/(double)(b.fire-b.start);
-            int glow=b.mega?12+(int)(p*20):5+(int)(p*5);
-            g.setColor(new Color(255,255,255,45+(int)(p*70)));g.fillRect(x-half,y,half*2,height-y);
-            g.setColor(Color.WHITE);g.fillOval(x-glow,y-glow,glow*2,glow*2);
-            for(int yy=y+12;yy<height;yy+=14){g.fillRect(x-half,yy,2,7);g.fillRect(x+half-2,yy,2,7);}
-        }else{
-            g.setColor(new Color(255,28,40,100));g.fillRect(x-half-5,y,half*2+10,height-y);
-            g.setColor(RED);g.fillRect(x-half,y,half*2,height-y);
-            g.setColor(new Color(255,143,116));g.fillRect(x-half/2,y,half,height-y);
-            g.setColor(new Color(255,245,225));g.fillRect(x-Math.max(1,half/5),y,Math.max(2,half*2/5),height-y);
+            // White warning remains visible for the entire charge; red edge marks danger width.
+            g.setColor(alpha(Color.WHITE,20+(int)(p*30)));g.fillRect(x-half,y,half*2,height-y);
+            g.setColor(alpha(Color.WHITE,(frame/8)%2==0?215:100));
+            for(int yy=y+10;yy<height;yy+=10){
+                g.fillRect(x-1,yy,2,6);
+                if(b.mega){g.fillRect(x-half,yy,2,6);g.fillRect(x+half-2,yy,2,6);}
+            }
+            drawOrb(g,x,y,(b.mega?28:12)*(.35+.65*p)*(1+.12*Math.sin(frame*.45)));
+            return;
         }
+        int h=Math.max(1,beamBottom(b)-y);
+        float pulse=(frame/4)%2==0?1f:.85f;
+        Graphics2D beam=(Graphics2D)g.create();
+        try{
+            beam.setComposite(AlphaComposite.SrcOver.derive(pulse));
+            beam.setColor(alpha(RED,45));beam.fillRect(x-half-10,y,half*2+20,h);
+            beam.setPaint(new LinearGradientPaint(x-half,0,x+half,0,
+                    new float[]{0f,.2f,.4f,.6f,.8f,1f},new Color[]{alpha(RED,0),alpha(RED,135),RED,RED,alpha(RED,135),alpha(RED,0)}));
+            beam.fillRect(x-half,y,half*2,h);
+            beam.setColor(alpha(Color.WHITE,100));int core=Math.max(3,half/4);
+            beam.fillRect(x-core-2,y,core*2+4,h);
+            beam.setColor(Color.WHITE);beam.fillRect(x-core,y,core*2,h);
+            beam.setColor(RED);
+            for(int i=0;i<6;i++){
+                int sy=y+(i*61+(frame-b.fire)*5)%h;
+                beam.fillRect(i%2==0?x-half-5:x+half+3,sy,2,Math.min(10,y+h-sy));
+            }
+            drawOrb(beam,x,y,b.mega?32:14);
+            if(beamBottom(b)>=height-1)drawImpact(beam,x,height-2,b.mega?half:20);
+        }finally{beam.dispose();}
     }
-    private static Color shotColor(Kind k){switch(k){case FREEZE:return ICE;case VULNERABLE:return VIOLET;case FAST:return AMBER;case SPLIT:return new Color(245,220,150);case ACCELERATED:return new Color(255,92,78);case REFLECTED:return new Color(135,235,255);case HOMING:return new Color(255,84,162);default:return Color.WHITE;}}
+    private static void drawOrb(Graphics2D g,int x,int y,double r){
+        float radius=(float)Math.max(1,r);
+        g.setPaint(new RadialGradientPaint(x,y,radius*1.6f,new float[]{0f,.18f,.42f,.7f,1f},
+                new Color[]{Color.WHITE,Color.WHITE,RED,alpha(RED,45),alpha(RED,0)}));
+        g.fill(new Ellipse2D.Double(x-radius*1.6,y-radius*1.6,radius*3.2,radius*3.2));
+        g.setColor(Color.WHITE);int bar=(int)(radius*.85);
+        g.fillRect(x-bar,y-1,bar*2,2);g.fillRect(x-1,y-bar,2,bar*2);
+    }
+    private static void drawImpact(Graphics2D g,int x,int y,int radius){
+        g.setPaint(new RadialGradientPaint(x,y,Math.max(1,radius),new float[]{0f,.35f,1f},
+                new Color[]{Color.WHITE,RED,alpha(RED,0)}));
+        g.fillOval(x-radius,y-radius,radius*2,radius*2);
+        g.setColor(Color.WHITE);
+        for(int i=-2;i<=2;i++)g.drawLine(x,y,x+i*radius/3,y-radius+Math.abs(i)*radius/5);
+    }
+    // Exact original res/graphics bullet masks (3 x 5); white for normal,
+    // split, sniper and accelerated shots, like the base game's Bullet class.
+    private static final String[] PLAYER_BULLET={"###",".#.",".#.",".#.",".#."};
+    private static final String[] ENEMY_BULLET={".#.",".#.",".#.",".#.","###"};
+    private static final String[] TRACKING={"..#..",".###.","#####","##.##",".###.","..#.."};
+    private static final String[] BOMB_ART={"#...#...#",".#######.","...###...","..#####..",".#######.",".#######.",".#######.",".#######.","..#####..","..#####..","...###...","....#...."};
+    private static final String[] EXPLOSION={".#..#...#..#.","..#..#.#..#..","...#.....#...","##.........##","...#.....#...","..#..#.#..#..",".#..#...#..#."};
+    private static void drawMask(Graphics2D g,String[] art,int x,int y,Color color,int scale){
+        g.setColor(color);
+        for(int row=0;row<art.length;row++)for(int col=0;col<art[row].length();col++)
+            if(art[row].charAt(col)=='#')g.fillRect(x+col*scale,y+row*scale,scale,scale);
+    }
+    private static Color shotColor(Kind k){
+        switch(k){case FREEZE:return ICE;case VULNERABLE:return VIOLET;case HOMING:return RED;default:return Color.WHITE;}
+    }
     private void drawShot(Graphics2D g,Shot s){
-        int x=(int)s.x,y=(int)s.y;g.setColor(shotColor(s.kind));
-        if(s.kind==Kind.HOMING){g.fillRect(x-4,y-7,8,14);g.fillRect(x-7,y-2,14,7);g.setColor(Color.WHITE);g.fillRect(x-2,y,4,4);}
-        else g.fillRect(x-3,y-5,6,s.kind==Kind.FAST?14:10);
+        int x=(int)Math.round(s.x),y=(int)Math.round(s.y);
+        if(s.kind==Kind.HOMING){
+            drawMask(g,TRACKING,x-5,y-6,RED,2);
+            g.setColor(Color.WHITE);g.fillRect(x-1,y-2,2,4);
+        }else drawMask(g,ENEMY_BULLET,x-3,y-5,shotColor(s.kind),2);
     }
     private void drawBomb(Graphics2D g,Bomb b){
         int x=(int)b.x,y=(int)b.y;
-        // Retro falling bomb: cross-shaped fins, metallic case and red warning band.
-        g.setColor(new Color(70,76,81));g.fillRect(x-9,y-15,18,5);g.fillRect(x-4,y-20,8,9);
-        g.setColor(new Color(148,155,153));g.fillOval(x-9,y-13,18,27);
-        g.setColor(new Color(65,70,78));g.fillRect(x-7,y-4,14,7);
-        g.setColor((frame/8)%2==0?RED:AMBER);g.fillRect(x-7,y-2,14,3);
-        g.setColor(new Color(255,115,45,100));g.drawOval(x-BOMB_RADIUS,(int)b.ground-BOMB_RADIUS,BOMB_RADIUS*2,BOMB_RADIUS*2);
+        drawMask(g,BOMB_ART,x-9,y-12,new Color(140,132,148),2);
+        g.setColor(new Color(50,40,52));g.fillRect(x-5,y-6,4,12);
+        g.setColor((frame/8)%2==0?RED:Color.WHITE);g.fillRect(x-7,y+2,14,2);
+        g.setColor(alpha(RED,110));g.drawOval(x-BOMB_RADIUS,(int)b.ground-BOMB_RADIUS,BOMB_RADIUS*2,BOMB_RADIUS*2);
     }
-    private static final String[][] DRONE_ART={
-        {"...##...","..####..","########","##.##.##",".######.","..#..#.."},
-        {".#....#.","###..###",".######.","##.##.##",".######.","...##..."},
-        {"...##...","...##...","..####..",".######.","########","#..##..#"},
-        {"##....##",".##..##.","########",".######.","###..###","#......#"},
-        {"..####..",".##..##.","########","##.##.##",".######.",".#....#."}
+    private void drawBlast(Graphics2D g,Blast b){
+        float p=Math.max(0,Math.min(1,(b.end-frame)/(float)(b.harmless?15:24)));
+        int scale=b.harmless?2:3+(int)((1-p)*2);
+        int x=(int)b.x,y=(int)b.y;
+        if(!b.harmless){g.setColor(alpha(RED,(int)(p*90)));g.drawOval(x-BOMB_RADIUS,y-BOMB_RADIUS,BOMB_RADIUS*2,BOMB_RADIUS*2);}
+        drawMask(g,EXPLOSION,x-13*scale/2,y-7*scale/2,alpha((frame/3)%2==0?Color.WHITE:RED,(int)(p*255)),scale);
+    }
+    // Existing Act 2/3/4 enemy frames, recoloured as the Superweapon's escorts.
+    private static final String[][][] DRONE_ART={
+            {{"#..#.##.#..#",".##########.","##..####..##","##.#....#.##","##.#.##.#.##",".###....###.","..#.####.#..",".#........#."},
+                    {".#..#..#..#.",".##########.","##..####..##","##.#....#.##","##.#.##.#.##",".###....###.","..#.####.#..","..#......#.."}},
+            {{".#...##...#.","..#.####.#..","..########..",".###.##.###.",".##########.","..########..","..#.####.#..",".#...##...#."},
+                    {"#....##....#",".#.######.#.","..########..",".##.####.##.",".##########.","..########..",".#.######.#.","#....##....#"}},
+            {{".....##.....",".....##.....","..########..",".##..##..##.","############",".#.######.#.",".#..#..#..#.","#....##....#"},
+                    {".....##.....",".....##.....","..########..",".##..##..##.","############",".#.######.#.","#..#....#..#",".....##....."}},
+            {{"....####....","..########..",".##.####.##.","############","#.#.#..#.#.#","#.#.#..#.#.#","..#.#..#.#..",".#..#..#..#."},
+                    {"....####....","..########..",".##.####.##.","############",".#.#.##.#.#.",".#.#.##.#.#.",".#..#..#..#.","..#..##..#.."}},
+            {{"##........##",".##......##.","..###..###..","..########..","...######...","....####....","....#..#....",".....##....."},
+                    {".#........#.","..##....##..",".####..####.","..########..","...######...","....####....",".....##.....",".....##....."}}
     };
+    private static final Color[] DRONE_COLORS={new Color(0xEEF3F7),ICE,new Color(0xE8C867),new Color(0xEC6A45),VIOLET};
     private void drawDrone(Graphics2D g,Drone d){
         int i=d.kind==Kind.FREEZE?1:d.kind==Kind.FAST?2:d.kind==Kind.SPLIT?3:d.kind==Kind.VULNERABLE?4:0;
-        String[] art=DRONE_ART[i];g.setColor(shotColor(d.kind));
-        for(int y=0;y<art.length;y++)for(int x=0;x<8;x++)if(art[y].charAt(x)=='#')g.fillRect((int)d.x-12+x*3,(int)d.y-9+y*3,3,3);
-        g.setColor(RED);g.fillRect((int)d.x-2,(int)d.y-2,4,4);
+        drawMask(g,DRONE_ART[i][(frame/30)%2],(int)d.x-12,(int)d.y-8,DRONE_COLORS[i],2);
     }
-    public void drawHud(Graphics2D g){
-        g.setColor(new Color(13,12,21));g.fillRect(0,0,width,Superweapon.TOP_Y);
-        g.setFont(new Font(Font.MONOSPACED,Font.BOLD,12));g.setColor(Color.WHITE);
-        g.drawString("SUPERWEAPON  /  PHASE "+(isPhaseTwo()?2:1),10,16);
-        g.drawString(invincible?"TEST: INVINCIBLE":"LIVES: "+getLives(),width-140,16);
-        int x=10,y=24,w=width-20,h=15;
-        g.setColor(new Color(65,18,24));g.fillRect(x,y,w,h);
-        g.setColor(RED);g.fillRect(x,y,(int)Math.round(w*hull/(double)HULL_HP),h);
-        if(shield>0){g.setColor(new Color(240,245,250));g.fillRect(x,y,(int)Math.round(w*shield/(double)SHIELD_HP),h);}
-        g.setColor(new Color(150,140,155));g.drawRect(x,y,w,h);
-        g.setFont(new Font(Font.MONOSPACED,Font.PLAIN,11));g.setColor(Color.WHITE);
-        g.drawString("SHIELD "+shield+"/"+SHIELD_HP+"   HULL "+hull+"/"+HULL_HP+"   HITS "+hits,10,53);
-        g.setColor(isFrozen()?ICE:isVulnerable()?VIOLET:AMBER);
-        String line=isWon()?"SUPERWEAPON DESTROYED - R: RESTART":isLost()?"GAME OVER - R: RESTART":isFrozen()?"FROZEN":isVulnerable()?"VULNERABLE":frame<messageUntil?message:"A/D MOVE | SPACE FIRE | T AUTO | ESC EXIT";
-        g.drawString(line,10,72);
+    public void drawHud(Graphics2D g){drawHud(g,new Font(Font.MONOSPACED,Font.PLAIN,12));}
+    public void drawHud(Graphics2D g,Font font){
+        g.setColor(Color.BLACK);g.fillRect(0,0,width,Superweapon.TOP_Y);
+        g.setFont(font);g.setColor(Color.WHITE);
+        g.drawString("SUPERWEAPON / PHASE "+(isPhaseTwo()?2:1),10,16);
+        String life=invincible?"TEST: INVINCIBLE":"LIVES: "+getLives();
+        g.drawString(life,width-10-g.getFontMetrics().stringWidth(life),16);
+        g.setColor(Color.GREEN);g.fillRect(0,40,width,2);
+        g.setColor(isFrozen()?ICE:isVulnerable()?VIOLET:Color.WHITE);
+        String line=isWon()?"SUPERWEAPON DESTROYED - R: RESTART":isLost()?"GAME OVER - R: RESTART":isFrozen()?"FROZEN":isVulnerable()?"VULNERABLE":frame<messageUntil?message:"A/D MOVE | SPACE FIRE | ESC EXIT";
+        g.setFont(font.deriveFont(10f));g.drawString(line,10,31);
+        g.setFont(font);g.setColor(Color.WHITE);
+        String label="BOSS";g.drawString(label,(width-g.getFontMetrics().stringWidth(label))/2,64);
+        int w=width/2,x=(width-w)/2,y=68,h=8;
+        g.setColor(Color.RED);g.drawRect(x,y,w,h);
+        g.fillRect(x,y,w*hull/HULL_HP,h);
+        if(shield>0){g.setColor(Color.WHITE);g.fillRect(x,y,w*shield/SHIELD_HP,h);}
+        g.setFont(font.deriveFont(10f));g.setColor(Color.WHITE);
+        g.drawString("S "+shield+"/"+SHIELD_HP,8,76);
+        String right="HP "+hull+"/"+HULL_HP;
+        g.drawString(right,width-8-g.getFontMetrics().stringWidth(right),76);
     }
 }

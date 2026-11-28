@@ -15,6 +15,8 @@ public final class Superweapon {
     public static final int PIXEL = 2;
     public static final int TOP_Y = 84; // Below the existing boss HUD.
     private static final BufferedImage IMAGE = createImage();
+    private static final BufferedImage SHIELD_EDGE = createOverlay(true);
+    private static final BufferedImage FLASH = createOverlay(false);
 
     private Superweapon() { }
 
@@ -45,22 +47,48 @@ public final class Superweapon {
         return (IMAGE.getRGB(px, py) >>> 24) != 0;
     }
 
+    /** A silhouette-following barrier / damage flash, not a rectangular overlay. */
+    public static void drawOverlay(Graphics2D target, int width, int topY,
+                                   boolean shield, float opacity) {
+        Graphics2D g = (Graphics2D) target.create();
+        try {
+            g.setComposite(java.awt.AlphaComposite.SrcOver.derive(opacity));
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g.drawImage(shield ? SHIELD_EDGE : FLASH, 0, topY, width,
+                    Math.round(width * ART_HEIGHT / (float) ART_WIDTH), null);
+        } finally { g.dispose(); }
+    }
+
+    private static BufferedImage createOverlay(boolean edge) {
+        BufferedImage result = new BufferedImage(ART_WIDTH, ART_HEIGHT,
+                BufferedImage.TYPE_INT_ARGB);
+        for (int y=0; y<ART_HEIGHT; y++) for (int x=0; x<ART_WIDTH; x++) {
+            if ((IMAGE.getRGB(x,y) >>> 24)==0) continue;
+            boolean border = y==ART_HEIGHT-1 || (IMAGE.getRGB(x,y+1) >>> 24)==0
+                    || (x>0 && (IMAGE.getRGB(x-1,y) >>> 24)==0)
+                    || (x<ART_WIDTH-1 && (IMAGE.getRGB(x+1,y) >>> 24)==0);
+            if (!edge || border) result.setRGB(x,y,edge ? 0xFFB9E8FF : 0xFFFFD6D6);
+        }
+        return result;
+    }
+
     private static int palette(final char c) {
         switch (c) {
             case '.': return 0;
-            case 'k': return 0xFF0F0C16;
-            case 'd': return 0xFF201D2B;
-            case 'a': return 0xFF302B3B;
-            case 'g': return 0xFF454050;
-            case 'l': return 0xFF655E6F;
-            case 's': return 0xFF8F8696;
-            case 'p': return 0xFF411439;
-            case 'm': return 0xFF741841;
-            case 'o': return 0xFF71141F;
-            case 'r': return 0xFFBE2128;
-            case 'f': return 0xFFF74323;
-            case 'y': return 0xFFFF9831;
-            case 'w': return 0xFFFFE49B;
+            case 'k': return 0xFF120A10;
+            case 'd': return 0xFF322834;
+            case 'a': return 0xFF423744;
+            case 'g': return 0xFF544C5A;
+            case 'l': return 0xFF8C8494;
+            case 's': return 0xFFB0A7B6;
+            case 'p': return 0xFF322834;
+            case 'm': return 0xFF960E1E;
+            case 'o': return 0xFF960E1E;
+            case 'r': return 0xFFFF2838;
+            case 'f': return 0xFFFF2838;
+            case 'y': return 0xFFFF8A80;
+            case 'w': return 0xFFFFD6D6;
             default: throw new IllegalArgumentException("Unknown art pixel: " + c);
         }
     }
