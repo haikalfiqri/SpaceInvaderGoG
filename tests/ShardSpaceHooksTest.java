@@ -26,6 +26,10 @@ public final class ShardSpaceHooksTest {
             // Loaded once, then the same image (or null while there is no art).
             check(ShardSpaceBackgrounds.forMode(mode) == ShardSpaceBackgrounds.forMode(mode),
                     mode + " background cached");
+            // GOG-106: every mode has its own 448x520 background.
+            check(ShardSpaceBackgrounds.forMode(mode) != null, mode + " background exists");
+            check(ShardSpaceBackgrounds.forMode(mode).getWidth() == 448
+                    && ShardSpaceBackgrounds.forMode(mode).getHeight() == 520, mode + " background size");
             check(ShardSpaceBosses.create(mode, 448) == null, mode + " boss placeholder");
             check(ShardSpaceEnemies.createFormation(settings, mode) == null,
                     mode + " enemies placeholder");
