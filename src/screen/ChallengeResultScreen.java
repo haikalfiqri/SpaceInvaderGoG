@@ -23,7 +23,7 @@ public class ChallengeResultScreen extends Screen {
 
 	/** True for the weekly challenge, false for the daily one. */
 	private final boolean weekly;
-	/** Name in the title, e.g. "Daily" or "Epic Shard Space". */
+	/** Name in the title, e.g. "Daily", "Weekly" or "Epic". */
 	private final String mode;
 	/** Last line, or null for the time until the next challenge. */
 	private final String footer;
@@ -78,7 +78,9 @@ public class ChallengeResultScreen extends Screen {
 	 * @param fps
 	 *            Frames per second.
 	 * @param mode
-	 *            Mode name for the title, e.g. "Epic Shard Space".
+	 *            Mode name for the title, e.g. "Epic" (the rarity only:
+	 *            "Legendary Shard Space cleared!" is wider than the
+	 *            screen).
 	 * @param footer
 	 *            Last line, e.g. "Plays left today: 3 / 5".
 	 * @param cleared
@@ -165,7 +167,7 @@ public class ChallengeResultScreen extends Screen {
 					Color.GREEN);
 		else
 			this.drawManager.drawCenteredRegularString(this,
-					"Clear every stage to earn the reward", y, MUTED);
+					"Shards only for clearing every stage", y, MUTED);
 		y += 40;
 		LocalDateTime now = LocalDateTime.now();
 		this.drawManager.drawCenteredRegularString(this, this.footer != null

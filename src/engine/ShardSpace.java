@@ -269,6 +269,22 @@ public final class ShardSpace {
 	}
 
 	/**
+	 * Why a mode can't start now, for the Shard Space menu (GOG-49).
+	 *
+	 * @param mode
+	 *            Mode the player picked.
+	 * @param day
+	 *            Today.
+	 * @return "Locked", "No plays left today", or null if it can start.
+	 */
+	public String startProblem(final Mode mode, final LocalDate day) {
+		if (!isUnlocked(mode))
+			return "Locked";
+		if (playsLeft(day) <= 0)
+			return "No plays left today";
+		return null;
+	}
+	/**
 	 * Uses one play to start a run.
 	 *
 	 * @param mode
@@ -316,6 +332,34 @@ public final class ShardSpace {
 				factor);
 		return paid == null ? "Couldn't save the shards"
 				: ShardReward.describe(paid);
+	}
+
+	/**
+	 * Ends a run (GOG-49): only a full clear (every wave and the boss)
+	 * counts and pays. A failed or quit run pays nothing, and its play
+	 * stays used.
+	 *
+	 * @param mode
+	 *            Mode played.
+	 * @param stagesCleared
+	 *            Stages the player cleared.
+	 * @param stageCount
+	 *            Stages in the run.
+	 * @param wallet
+	 *            Wallet to pay into.
+	 * @param factor
+	 *            1.0, or 1.1 with Shard Hunter.
+	 * @param random
+	 *            Random numbers for the reward.
+	 * @return Reward text for the results screen, or null if the run was
+	 *         not fully cleared.
+	 */
+	public String finishRun(final Mode mode, final int stagesCleared,
+			final int stageCount, final ShardWallet wallet,
+			final double factor, final Random random) {
+		if (stagesCleared < stageCount)
+			return null;
+		return recordClear(mode, wallet, factor, random);
 	}
 
 	private boolean save() {

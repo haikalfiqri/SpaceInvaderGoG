@@ -110,11 +110,8 @@ public class ShardSpaceScreen extends Screen {
 				return;
 			}
 			Mode mode = Mode.values()[this.selected];
-			if (!this.progress.isUnlocked(mode))
-				this.warning = "Locked";
-			else if (this.progress.playsLeft(LocalDate.now()) <= 0)
-				this.warning = "No plays left today";
-			else {
+			this.warning = this.progress.startProblem(mode, LocalDate.now());
+			if (this.warning == null) {
 				this.chosen = mode;
 				this.returnCode = PLAY;
 				this.isRunning = false;
@@ -171,16 +168,19 @@ public class ShardSpaceScreen extends Screen {
 	 */
 	private int drawDetails(final Mode mode, final int top) {
 		int y = top;
-		this.drawManager.drawCenteredRegularString(this, ShardSpace.WAVES
-				+ " waves, then the Shard boss", y, Color.WHITE);
+		// Shards come only from a full clear; coins drop as usual.
+		this.drawManager.drawCenteredRegularString(this, "Clear "
+				+ ShardSpace.WAVES + " waves + boss for:", y, Color.WHITE);
 		y += 24;
 		// Three rarities per line, so Mythic's five fit the screen.
 		String[] parts = rewardText(mode).split(", ");
 		for (int i = 0; i < parts.length; i += 3) {
 			String line = String.join(", ", java.util.Arrays.copyOfRange(
 					parts, i, Math.min(parts.length, i + 3)));
-			this.drawManager.drawCenteredRegularString(this,
-					(i == 0 ? "Reward: " : "") + line, y, Color.GREEN);
+			if (i + 3 >= parts.length)
+				line += " shards";
+			this.drawManager.drawCenteredRegularString(this, line, y,
+					Color.GREEN);
 			y += 24;
 		}
 		Mode previous = mode.previous();
