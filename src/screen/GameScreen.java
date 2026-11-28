@@ -394,8 +394,8 @@ public class GameScreen extends Screen {
 						engine.ShardSpace.activeMode()) : null;
 		if (shardBackground != null) {
 			this.storyBackground = shardBackground;
-			this.backgroundEffects = new engine.StoryBackgroundEffects(
-					this.level, shardBackground);
+			// The story animations belong to the story art (GOG-106).
+			this.backgroundEffects = null;
 		}
 		this.score = gameState.getScore();
 		this.lives = gameState.getLivesRemaining();
@@ -1119,7 +1119,8 @@ public class GameScreen extends Screen {
 		drawManager.initDrawing(this);
 		if (this.storyBackground != null) {
 			drawManager.drawBackground(this, this.storyBackground);
-			this.backgroundEffects.draw(drawManager, this);
+			if (this.backgroundEffects != null)
+				this.backgroundEffects.draw(drawManager, this);
 		}
 
 		if (!this.paused) {
