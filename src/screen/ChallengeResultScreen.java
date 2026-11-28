@@ -167,7 +167,7 @@ public class ChallengeResultScreen extends Screen {
 					Color.GREEN);
 		else
 			this.drawManager.drawCenteredRegularString(this,
-					"Clear every stage to earn the reward", y, MUTED);
+					"Shards only for clearing every stage", y, MUTED);
 		y += 40;
 		LocalDateTime now = LocalDateTime.now();
 		this.drawManager.drawCenteredRegularString(this, this.footer != null

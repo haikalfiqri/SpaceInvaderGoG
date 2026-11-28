@@ -177,8 +177,10 @@ public class ShardSpaceScreen extends Screen {
 		for (int i = 0; i < parts.length; i += 3) {
 			String line = String.join(", ", java.util.Arrays.copyOfRange(
 					parts, i, Math.min(parts.length, i + 3)));
-			this.drawManager.drawCenteredRegularString(this,
-					(i == 0 ? "Reward: " : "") + line, y, Color.GREEN);
+			if (i + 3 >= parts.length)
+				line += " shards";
+			this.drawManager.drawCenteredRegularString(this, line, y,
+					Color.GREEN);
 			y += 24;
 		}
 		Mode previous = mode.previous();
