@@ -915,9 +915,10 @@ public final class Core {
 	 *         the title screen.
 	 */
 	private static int runChallenges(final int width, final int height) {
+		// Daily and weekly shard rewards, once per day / week (GOG-46).
+		ChallengeRewards.install();
 		currentScreen = new ChallengeMenuScreen(width, height, FPS);
-		int choice = frame.setScreen(currentScreen);
-		if (choice == ChallengeMenuScreen.OPEN_SHARD_SPACE)
+		int choice = frame.setScreen(currentScreen);		if (choice == ChallengeMenuScreen.OPEN_SHARD_SPACE)
 			return runShardSpace(width, height);
 		boolean weekly = choice == ChallengeMenuScreen.PLAY_WEEKLY;
 		if (!weekly && choice != ChallengeMenuScreen.PLAY_DAILY)
