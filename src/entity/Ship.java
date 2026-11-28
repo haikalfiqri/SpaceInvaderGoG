@@ -63,7 +63,7 @@ public class Ship extends Entity {
 		 *            Sprite of the ship while it is not destroyed.
 		 */
 		ShipType(final int speed, final int shootingInterval,
-				 final SpriteType idleSprite) {
+		         final SpriteType idleSprite) {
 			this.speed = speed;
 			this.shootingInterval = shootingInterval;
 			this.idleSprite = idleSprite;
@@ -196,7 +196,7 @@ public class Ship extends Entity {
 	/**
 	 * Moves the ship speed uni ts right, or until the right screen border is
 	 * reached.
-		 */
+	 */
 	public final void moveRight() {
 		this.positionX += nextStep();
 	}
@@ -204,7 +204,7 @@ public class Ship extends Entity {
 	/**
 	 * Moves the ship speed units left, or until the left screen border is
 	 * reached.
-	 	 */
+	 */
 	public final void moveLeft() {
 		this.positionX -= nextStep();
 	}
@@ -252,7 +252,7 @@ public class Ship extends Entity {
 						positionY, bulletSpeed));
 			} else if (this.type == ShipType.BIG_BULLET) {
 				// Spawns a larger projectile (e.g., 9x15 scaled by 2)
-								// Spawns a larger projectile (e.g., 9x15 scaled by 2)
+				// Spawns a larger projectile (e.g., 9x15 scaled by 2)
 				bullets.add(BulletPool.getCustomBullet(centerX, positionY,
 						bulletSpeed, (int) Math.round(9 * 2 * this.skillBulletSize),
 						(int) Math.round(15 * 2 * this.skillBulletSize)));
@@ -281,7 +281,7 @@ public class Ship extends Entity {
 	 *            Extra bullet speed in pixels per frame.
 	 */
 	public final void setItemBonuses(final double fireRateBonus,
-									 final double bulletSpeedBonus) {
+	                                 final double bulletSpeedBonus) {
 		setItemBonuses(fireRateBonus, bulletSpeedBonus, 0);
 	}
 
@@ -298,12 +298,12 @@ public class Ship extends Entity {
 	 *            Extra movement speed in pixels per frame.
 	 */
 	public final void setItemBonuses(final double fireRateBonus,
-									 final double bulletSpeedBonus, final double movementSpeedBonus) {
+	                                 final double bulletSpeedBonus, final double movementSpeedBonus) {
 		this.itemMovementSpeedBonus = (int) Math.round(Math.max(0,
 				movementSpeedBonus));
 		this.itemBulletSpeedBonus = Math.max(0, bulletSpeedBonus);
 		double bonus = Math.max(0, fireRateBonus);
-				if (bonus != this.itemFireRateBonus) {
+		if (bonus != this.itemFireRateBonus) {
 			this.itemFireRateBonus = bonus;
 			updateShootingInterval();
 		}
@@ -323,8 +323,8 @@ public class Ship extends Entity {
 	 *            Bullet size factor (Big Bullet's shell only).
 	 */
 	public final void setSkillBonuses(final double speed,
-			final double fireRate, final double bulletSpeed,
-			final double bulletSize) {
+	                                  final double fireRate, final double bulletSpeed,
+	                                  final double bulletSize) {
 		this.skillSpeed = Math.max(0.1, speed);
 		this.skillBulletSpeed = Math.max(0.1, bulletSpeed);
 		this.skillBulletSize = Math.max(0.1, bulletSize);
@@ -361,7 +361,7 @@ public class Ship extends Entity {
 	/**
 	 * Paints the ship in a skin colour (GoG - Currency System). The
 
-	/**
+	 /**
 	 * Paints the ship in a skin colour (GoG - Currency System). The
 	 * low-health blink still flashes red and returns to this colour.
 	 *
@@ -420,6 +420,20 @@ public class Ship extends Entity {
 		else if (this.frozenTint)
 			setColor(this.blinkOn ? BLINK_COLOR : this.skinColor);
 		this.frozenTint = frozen;
+	}
+
+	/**
+	 * GOG-105: Show the normal ship during non-fatal hit recovery without
+	 * resetting or shortening the original damage-protection cooldown.
+	 * The no-argument update remains available for the final-life explosion.
+	 *
+	 * @param canRecover True when the player has lives remaining.
+	 */
+	public final void update(final boolean canRecover) {
+		update();
+		if (canRecover && isDestroyed()) {
+			this.spriteType = this.idleSprite;
+		}
 	}
 
 	/**
@@ -486,7 +500,7 @@ public class Ship extends Entity {
 	}
 
 	/**
-	 	 * Getter for the ship's speed.
+	 * Getter for the ship's speed.
 	 *
 	 * @return Speed of the ship, including item and skill bonuses, rounded
 	 *         to whole pixels per frame.

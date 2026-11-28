@@ -647,14 +647,20 @@ public class GameScreen extends Screen {
 				this.bossFightStarted = true;
 			}
 
-			// A Polar freeze bullet locks moving and shooting (GOG-84);
-			// items can still be used.
-			if (!this.ship.isDestroyed() && !this.ship.isFrozen()) {
+			// GOG-105: movement is allowed during post-hit invincibility.
+			// Polar freeze still locks movement and shooting (GOG-84).
+			if (this.lives > 0 && !this.ship.isFrozen()) {
 				boolean moveRight = inputManager.isKeyDown(KeyEvent.VK_RIGHT)
 						|| inputManager.isKeyDown(KeyEvent.VK_D);
 				boolean moveLeft = inputManager.isKeyDown(KeyEvent.VK_LEFT)
 						|| inputManager.isKeyDown(KeyEvent.VK_A);
-				blinkDash(moveLeft, moveRight); // Blink Dash capstone (GOG-91)
+				if (!this.ship.isDestroyed()) {
+					blinkDash(moveLeft, moveRight); // Blink Dash capstone (GOG-91)
+				} else {
+					// Track held keys without activating a dash during recovery.
+					this.leftWasDown = moveLeft;
+					this.rightWasDown = moveRight;
+				}
 
 				boolean isRightBorder = this.ship.getPositionX()
 						+ this.ship.getWidth() + this.ship.getSpeed() > this.width - 1;
@@ -671,9 +677,11 @@ public class GameScreen extends Screen {
 				// down, anywhere between the HUD and its starting row.
 				if (EndlessMode.isEnabled())
 					moveFreeRoam();
-				if (inputManager.isKeyDown(KeyEvent.VK_SPACE)) {
+				// Recovery allows repositioning, not shooting.
+				if (!this.ship.isDestroyed()
+						&& inputManager.isKeyDown(KeyEvent.VK_SPACE)) {
 					// Count bullets, not trigger pulls: Two Way fires two at
-										// once, and accuracy is kills per bullet.
+					// once, and accuracy is kills per bullet.
 					int bulletsBefore = this.bullets.size();
 					if (this.ship.shoot(this.bullets)) {
 						this.bulletsShot += this.bullets.size() - bulletsBefore;
@@ -708,7 +716,7 @@ public class GameScreen extends Screen {
 				this.logger.info("The special ship has escaped");
 			}
 
-			this.ship.update();
+			this.ship.update(this.lives > 0);
 			if (this.midBoss != null) {
 				if (!this.items.enemiesFrozen()) {
 					this.midBoss.update();
@@ -1123,6 +1131,11 @@ public class GameScreen extends Screen {
 			// End of Act 1 (GOG-74): the black hole sits behind the ship,
 			// which shrinks away while it is pulled in.
 			long sceneNow = System.currentTimeMillis();
+			// GOG-105: Blink the ship during non-fatal hit recovery.
+			// This is visual only; the existing damage cooldown is unchanged.
+			boolean recoveryBlinkHidden = this.lives > 0
+					&& this.ship.isDestroyed() && !this.levelFinished
+					&& (sceneNow / 100L) % 2L == 1L;
 			if (this.blackHole != null)
 				drawManager.drawBlackHole(this.blackHole.getCenterX(),
 						this.blackHole.getCenterY(),
@@ -1131,7 +1144,7 @@ public class GameScreen extends Screen {
 			if (this.blackHole != null && this.blackHole.isPulling(sceneNow))
 				drawManager.drawEntityShrunk(this.ship,
 						this.blackHole.getShipScale(sceneNow));
-			else if (!warping)
+			else if (!warping && !recoveryBlinkHidden)
 				drawManager.drawEntity(this.ship, this.ship.getPositionX(),
 						this.ship.getPositionY());
 			drawManager.drawWarpIn(this.warpIn, this.ship,
@@ -1322,7 +1335,7 @@ public class GameScreen extends Screen {
 			return;
 		Bullet first = this.ship.getLastShot().get(0);
 		this.bullets.add(BulletPool.getBullet(this.ship.getPositionX()
-				+ this.ship.getWidth() / 2, first.getPositionY(),
+						+ this.ship.getWidth() / 2, first.getPositionY(),
 				first.getSpeed()));
 		this.bulletsShot++;
 	}
