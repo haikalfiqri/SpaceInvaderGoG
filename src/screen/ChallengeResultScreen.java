@@ -8,10 +8,11 @@ import engine.Core;
 import engine.DailyChallenge;
 import engine.WeeklyChallenge;
 
+
 /**
- * Results of a daily or weekly challenge run (GOG-102, GOG-44): cleared or
- * failed, stages cleared, score and reward. Space or Enter goes back to the
- * challenges menu.
+ * Results of a daily, weekly or Shard Space run (GOG-102, GOG-44,
+ * GOG-49): cleared or failed, stages cleared, score and reward. Space or
+ * Enter goes back to the challenges menu.
  */
 public class ChallengeResultScreen extends Screen {
 
@@ -22,6 +23,10 @@ public class ChallengeResultScreen extends Screen {
 
 	/** True for the weekly challenge, false for the daily one. */
 	private final boolean weekly;
+	/** Name in the title, e.g. "Daily", "Weekly" or "Epic". */
+	private final String mode;
+	/** Last line, or null for the time until the next challenge. */
+	private final String footer;
 	/** True if every stage was cleared. */
 	private final boolean cleared;
 	/** Stages cleared. */
@@ -59,8 +64,53 @@ public class ChallengeResultScreen extends Screen {
 			final int fps, final boolean weekly, final boolean cleared,
 			final int stagesCleared,
 			final int stageCount, final int score, final String reward) {
+		this(width, height, fps, weekly, weekly ? "Weekly" : "Daily", null,
+				cleared, stagesCleared, stageCount, score, reward);
+	}
+
+	/**
+	 * Results of a Shard Space run (GOG-49).
+	 *
+	 * @param width
+	 *            Screen width.
+	 * @param height
+	 *            Screen height.
+	 * @param fps
+	 *            Frames per second.
+	 * @param mode
+	 *            Mode name for the title, e.g. "Epic" (the rarity only:
+	 *            "Legendary Shard Space cleared!" is wider than the
+	 *            screen).
+	 * @param footer
+	 *            Last line, e.g. "Plays left today: 3 / 5".
+	 * @param cleared
+	 *            True if every stage was cleared.
+	 * @param stagesCleared
+	 *            Stages cleared.
+	 * @param stageCount
+	 *            Stages in the run.
+	 * @param score
+	 *            Final score.
+	 * @param reward
+	 *            Reward text, or null if the run failed.
+	 */
+	public ChallengeResultScreen(final int width, final int height,
+			final int fps, final String mode, final String footer,
+			final boolean cleared, final int stagesCleared,
+			final int stageCount, final int score, final String reward) {
+		this(width, height, fps, false, mode, footer, cleared, stagesCleared,
+				stageCount, score, reward);
+	}
+
+	private ChallengeResultScreen(final int width, final int height,
+			final int fps, final boolean weekly, final String mode,
+			final String footer, final boolean cleared,
+			final int stagesCleared, final int stageCount, final int score,
+			final String reward) {
 		super(width, height, fps);
 		this.weekly = weekly;
+		this.mode = mode;
+		this.footer = footer;
 		this.cleared = cleared;
 		this.stagesCleared = stagesCleared;
 		this.stageCount = stageCount;
@@ -100,7 +150,7 @@ public class ChallengeResultScreen extends Screen {
 	/** Draws the results. */
 	private void draw() {
 		this.drawManager.initDrawing(this);
-		String mode = this.weekly ? "Weekly" : "Daily";
+		String mode = this.mode;
 		this.drawManager.drawScreenTitle(this,
 				mode + (this.cleared ? " cleared!" : " failed"));
 
@@ -117,10 +167,11 @@ public class ChallengeResultScreen extends Screen {
 					Color.GREEN);
 		else
 			this.drawManager.drawCenteredRegularString(this,
-					"Clear every stage to earn the reward", y, MUTED);
+					"Shards only for clearing every stage", y, MUTED);
 		y += 40;
 		LocalDateTime now = LocalDateTime.now();
-		this.drawManager.drawCenteredRegularString(this, "New "
+		this.drawManager.drawCenteredRegularString(this, this.footer != null
+				? this.footer : "New "
 				+ mode.toLowerCase() + " in "
 				+ DailyChallenge.formatCountdown(this.weekly
 						? WeeklyChallenge.timeUntilReset(now)

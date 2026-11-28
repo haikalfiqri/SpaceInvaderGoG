@@ -917,6 +917,8 @@ public final class Core {
 	private static int runChallenges(final int width, final int height) {
 		currentScreen = new ChallengeMenuScreen(width, height, FPS);
 		int choice = frame.setScreen(currentScreen);
+		if (choice == ChallengeMenuScreen.OPEN_SHARD_SPACE)
+			return runShardSpace(width, height);
 		boolean weekly = choice == ChallengeMenuScreen.PLAY_WEEKLY;
 		if (!weekly && choice != ChallengeMenuScreen.PLAY_DAILY)
 			return 1;
@@ -978,6 +980,84 @@ public final class Core {
 				state.getScore(), reward);
 		frame.setScreen(currentScreen);
 		return ChallengeMenuScreen.CODE;
+	}
+
+	/**
+	 * Shows the Shard Space menu (GOG-49) and plays the mode the player
+	 * picks: {@link ShardSpace#WAVES} waves and the boss, then its results.
+	 * Each run uses one of the day's Shard Space plays, not stamina, and
+	 * never touches story saves or story rewards.
+	 *
+	 * @param width
+	 *            Screen width.
+	 * @param height
+	 *            Screen height.
+	 * @return The challenges menu code, when the player goes back.
+	 */
+	private static int runShardSpace(final int width, final int height) {
+		ShardSpace progress = ShardSpace.getInstance();
+		while (true) {
+			ShardSpaceScreen menu = new ShardSpaceScreen(width, height, FPS,
+					progress);
+			currentScreen = menu;
+			if (frame.setScreen(currentScreen) != ShardSpaceScreen.PLAY)
+				return ChallengeMenuScreen.CODE;
+			ShardSpace.Mode mode = menu.getChosenMode();
+			LocalDate day = LocalDate.now();
+			// The play is used now, so quitting the run doesn't refund it.
+			if (!progress.startPlay(mode, day))
+				continue;
+
+			SoundManager.getInstance().stopBgm();
+			EndlessMode.setEnabled(false);
+			ItemSystem.setRunEquipment(ItemLoadout.getInstance()
+					.getEquipped(ItemLoadout.Mode.STORY));
+			List<DailyChallenge.Stage> stages = ShardSpace.stagesFor(mode);
+			LOGGER.info("Starting " + mode.getTitle());
+
+			GameState state = new GameState(stages.get(0).getLevel(), 0,
+					MAX_LIVES, 0, 0, 0);
+			int stagesCleared = 0;
+			// Both flags: isRunning() skips story-only achievements, and
+			// activeMode() picks the Shard Space boss, enemies, background.
+			DailyChallenge.setRunning(true);
+			ShardSpace.setActiveMode(mode);
+			try {
+				for (DailyChallenge.Stage stage : stages) {
+					state = new GameState(stage.getLevel(), state.getScore(),
+							state.getLivesRemaining(), state.getBulletsShot(),
+							state.getShipsDestroyed(), 0,
+							state.getLevelsCompletedRun(),
+							state.getCoinsCollected());
+					currentScreen = new GameScreen(state,
+							StoryMode.getSettings(stage.getLevel()), false,
+							width, height, FPS);
+					frame.setScreen(currentScreen);
+					state = ((GameScreen) currentScreen).getGameState();
+					if (state.getLivesRemaining() <= 0)
+						break;
+					stagesCleared++;
+				}
+			} finally {
+				ShardSpace.setActiveMode(null);
+				DailyChallenge.setRunning(false);
+			}
+
+			boolean cleared = stagesCleared == stages.size();
+			String reward = progress.finishRun(mode, stagesCleared,
+					stages.size(), skilltree.ShardWallet.getInstance(),
+					ShardReward.playerFactor(), new java.util.Random());
+			LOGGER.info(mode.getTitle() + (cleared ? " cleared: " + reward
+					: " failed: " + stagesCleared + "/" + stages.size()));
+
+			currentScreen = new ChallengeResultScreen(width, height, FPS,
+					mode.getRarity().getDisplayName(), "Plays left today: "
+							+ progress.playsLeft(day) + " / "
+							+ ShardSpace.PLAYS_PER_DAY,
+					cleared, stagesCleared, stages.size(), state.getScore(),
+					reward);
+			frame.setScreen(currentScreen);
+		}
 	}
 
 	/**
