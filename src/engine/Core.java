@@ -146,6 +146,10 @@ public final class Core {
 					}
 					boolean endless = returnCode == 8;
 					EndlessMode.setEnabled(endless);
+					// Bank diamonds every few waves in endless (GOG-109).
+					if (endless)
+						EndlessCheckpoint.install((wave, banked) ->
+								showCheckpoint(wave, banked, width, height));
 					// Equip this mode's items for the run (GOG-50).
 					ItemSystem.setRunEquipment(ItemLoadout.getInstance()
 							.getEquipped(endless ? ItemLoadout.Mode.ENDLESS
@@ -855,6 +859,25 @@ public final class Core {
 						+ " diamonds.");
 
 		return withPendingDiamonds(state, 0);
+	}
+
+	/**
+	 * Shows what an endless checkpoint banked (GOG-109).
+	 *
+	 * @param clearedWave
+	 *            Checkpoint wave that was just cleared.
+	 * @param banked
+	 *            Diamonds that were banked.
+	 * @param width
+	 *            Screen width.
+	 * @param height
+	 *            Screen height.
+	 */
+	private static void showCheckpoint(final int clearedWave,
+			final int banked, final int width, final int height) {
+		currentScreen = new CheckpointScreen(width, height, FPS,
+				clearedWave, banked);
+		frame.setScreen(currentScreen);
 	}
 
 	private static void showLevelReward(
