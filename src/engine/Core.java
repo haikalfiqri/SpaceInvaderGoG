@@ -919,7 +919,7 @@ public final class Core {
 		ChallengeRewards.install();
 		currentScreen = new ChallengeMenuScreen(width, height, FPS);
 		int choice = frame.setScreen(currentScreen);
-		if (choice == ChallengeMenuScreen.OPEN_SHARD_SPACE)		if (choice == ChallengeMenuScreen.OPEN_SHARD_SPACE)
+		if (choice == ChallengeMenuScreen.OPEN_SHARD_SPACE)	
 			return runShardSpace(width, height);
 		boolean weekly = choice == ChallengeMenuScreen.PLAY_WEEKLY;
 		if (!weekly && choice != ChallengeMenuScreen.PLAY_DAILY)
