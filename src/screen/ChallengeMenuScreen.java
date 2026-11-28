@@ -2,21 +2,23 @@ package screen;
 
 import java.awt.Color;
 import java.awt.event.KeyEvent;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import engine.Cooldown;
 import engine.Core;
 import engine.DailyChallenge;
+import engine.ShardSpace;
 import engine.WeeklyChallenge;
 
 /**
- * Challenges menu (GOG-102, GOG-44): pick the daily or the weekly
- * challenge. Shows the stages of the highlighted challenge and the time
- * until they change.
+ * Challenges menu (GOG-102, GOG-44, GOG-49): pick the daily or the weekly
+ * challenge, or open Shard Space. Shows the stages of the highlighted
+ * challenge and the time until they change.
  *
- * Returns {@link #PLAY_DAILY} or {@link #PLAY_WEEKLY} to start a run, or 1
- * for the title screen.
+ * Returns {@link #PLAY_DAILY} or {@link #PLAY_WEEKLY} to start a run,
+ * {@link #OPEN_SHARD_SPACE}, or 1 for the title screen.
  */
 public class ChallengeMenuScreen extends Screen {
 
@@ -26,6 +28,8 @@ public class ChallengeMenuScreen extends Screen {
 	public static final int PLAY_DAILY = 13;
 	/** Return code: start the weekly challenge. */
 	public static final int PLAY_WEEKLY = 14;
+	/** Return code: open the Shard Space menu (GOG-49). */
+	public static final int OPEN_SHARD_SPACE = 15;
 
 	/** Milliseconds between two menu moves while a key is held. */
 	private static final int MOVE_DELAY = 200;
@@ -40,6 +44,8 @@ public class ChallengeMenuScreen extends Screen {
 		DAILY("Daily challenge", true),
 		/** Play this week's weekly challenge (GOG-44). */
 		WEEKLY("Weekly challenge", true),
+		/** Farm shards in the five rarity modes (GOG-49). */
+		SHARD_SPACE("Shard Space", true),
 		/** Back to the title screen. */
 		BACK("Back", true);
 
@@ -126,6 +132,9 @@ public class ChallengeMenuScreen extends Screen {
 			} else if (this.selected == Option.WEEKLY) {
 				this.returnCode = PLAY_WEEKLY;
 				this.isRunning = false;
+			} else if (this.selected == Option.SHARD_SPACE) {
+				this.returnCode = OPEN_SHARD_SPACE;
+				this.isRunning = false;
 			} else if (this.selected == Option.BACK) {
 				this.returnCode = 1;
 				this.isRunning = false;
@@ -163,6 +172,13 @@ public class ChallengeMenuScreen extends Screen {
 			y += 30;
 		}
 
+		if (this.shown == Option.SHARD_SPACE) {
+			drawShardSpace(y + 20);
+			this.drawManager.drawKeyHints(this,
+					"w/s move, space select, esc back");
+			this.drawManager.completeDrawing(this);
+			return;
+		}
 		boolean weekly = this.shown == Option.WEEKLY;
 		List<DailyChallenge.Stage> stages = weekly ? this.weeklyStages
 				: this.dailyStages;
@@ -186,5 +202,32 @@ public class ChallengeMenuScreen extends Screen {
 		this.drawManager.drawKeyHints(this,
 				"w/s move, space select, esc back");
 		this.drawManager.completeDrawing(this);
+	}
+
+	/**
+	 * Draws the Shard Space summary: plays left and open modes.
+	 *
+	 * @param top
+	 *            First line's y.
+	 */
+	private void drawShardSpace(final int top) {
+		ShardSpace progress = ShardSpace.getInstance();
+		int y = top;
+		this.drawManager.drawCenteredRegularString(this, "Shard Space", y,
+				Color.GREEN);
+		y += 22;
+		this.drawManager.drawCenteredRegularString(this, ShardSpace.WAVES
+				+ " waves + boss, one mode per rarity", y, Color.WHITE);
+		y += 22;
+		int open = 0;
+		for (ShardSpace.Mode mode : ShardSpace.Mode.values())
+			if (progress.isUnlocked(mode))
+				open++;
+		this.drawManager.drawCenteredRegularString(this, "Modes open: " + open
+				+ " / " + ShardSpace.Mode.values().length, y, Color.WHITE);
+		y += 32;
+		this.drawManager.drawCenteredRegularString(this, "Plays left today: "
+				+ progress.playsLeft(LocalDate.now()) + " / "
+				+ ShardSpace.PLAYS_PER_DAY, y, MUTED);
 	}
 }
